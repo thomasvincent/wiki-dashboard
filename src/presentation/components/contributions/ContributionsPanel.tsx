@@ -3,7 +3,7 @@
  * Displays contribution history with filtering and drill-down
  */
 
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import {
   Box,
   Card,
@@ -41,7 +41,6 @@ import {
 } from '@mui/icons-material';
 import { format, isToday, isYesterday, isThisWeek } from 'date-fns';
 import { SectionHeader, EmptyState, WikiLink } from '../common';
-import { useUIStore } from '@presentation/hooks';
 import { useDashboard } from '@presentation/hooks/queries';
 import { analyzeContributions } from '@application/services';
 import { formatByteDiff, CONTRIBUTION_TYPE_DISPLAY } from '@domain/value-objects';
@@ -313,10 +312,11 @@ export function ContributionsPanel() {
       case 'week':
         result = result.filter((c) => isThisWeek(c.timestamp));
         break;
-      case 'month':
+      case 'month': {
         const monthAgo = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
         result = result.filter((c) => c.timestamp >= monthAgo);
         break;
+      }
     }
 
     // Sort

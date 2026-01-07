@@ -3,7 +3,6 @@
  * Tracks conflict of interest disclosures for Wikipedia editing
  */
 
-import React from 'react';
 import {
   Box,
   Card,

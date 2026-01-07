@@ -4,12 +4,10 @@
  * Following Material Design 3 guidelines
  */
 
-import React from 'react';
 import {
   Box,
   Card,
   CardContent,
-  CardHeader,
   Chip,
   IconButton,
   LinearProgress,

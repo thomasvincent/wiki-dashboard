@@ -10,12 +10,9 @@ import type {
   Contribution,
   Task,
   FocusArea,
-  EditorStats,
 } from '@domain/entities';
 import type {
   IDashboardRepository,
-  IContributionRepository,
-  ITaskRepository,
   DashboardConfig,
 } from '@domain/repositories';
 
