@@ -34,7 +34,8 @@ export type ActiveSection =
   | 'templates'
   | 'research'
   | 'quality'
-  | 'collaboration';
+  | 'collaboration'
+  | 'settings';
 
 // === UI State ===
 
@@ -66,7 +67,7 @@ export const useUIStore = create<UIState & UIActions>()(
         darkMode: false,
         activeSection: 'overview',
         drillDownPath: [],
-        expandedNavGroups: ['dashboard', 'my-work', 'monitoring', 'analytics', 'tools', 'community'],
+        expandedNavGroups: ['dashboard', 'my-work', 'monitoring', 'analytics', 'tools', 'community', 'account'],
 
         // Actions
         toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
@@ -427,5 +428,132 @@ export const useNotificationStore = create<NotificationState & NotificationActio
       decrementUnread: () => set((state) => ({ unreadCount: Math.max(0, state.unreadCount - 1) })),
     }),
     { name: 'NotificationStore' }
+  )
+);
+
+// === Auth Store ===
+
+interface AuthState {
+  isAuthenticated: boolean;
+  username: string | null;
+  userId: number | null;
+  accessToken: string | null;
+  accessSecret: string | null;
+  editCount: number | null;
+  groups: string[];
+  registrationDate: string | null;
+}
+
+interface AuthActions {
+  login: (data: {
+    username: string;
+    userId: number;
+    accessToken: string;
+    accessSecret: string;
+    editCount?: number;
+    groups?: string[];
+    registrationDate?: string;
+  }) => void;
+  logout: () => void;
+  updateUserInfo: (data: {
+    editCount?: number;
+    groups?: string[];
+  }) => void;
+  setUsername: (username: string) => void;
+}
+
+export const useAuthStore = create<AuthState & AuthActions>()(
+  devtools(
+    persist(
+      (set) => ({
+        // State
+        isAuthenticated: false,
+        username: null,
+        userId: null,
+        accessToken: null,
+        accessSecret: null,
+        editCount: null,
+        groups: [],
+        registrationDate: null,
+
+        // Actions
+        login: (data) =>
+          set({
+            isAuthenticated: true,
+            username: data.username,
+            userId: data.userId,
+            accessToken: data.accessToken,
+            accessSecret: data.accessSecret,
+            editCount: data.editCount ?? null,
+            groups: data.groups ?? [],
+            registrationDate: data.registrationDate ?? null,
+          }),
+        logout: () =>
+          set({
+            isAuthenticated: false,
+            username: null,
+            userId: null,
+            accessToken: null,
+            accessSecret: null,
+            editCount: null,
+            groups: [],
+            registrationDate: null,
+          }),
+        updateUserInfo: (data) =>
+          set((state) => ({
+            editCount: data.editCount ?? state.editCount,
+            groups: data.groups ?? state.groups,
+          })),
+        setUsername: (username) =>
+          set({
+            username,
+            isAuthenticated: false, // Not truly authenticated without OAuth
+          }),
+      }),
+      { name: 'wiki-dashboard-auth' }
+    ),
+    { name: 'AuthStore' }
+  )
+);
+
+// === Settings Store ===
+
+interface SettingsState {
+  configuredUsername: string;
+  refreshInterval: number; // in minutes
+  showNotifications: boolean;
+  compactMode: boolean;
+}
+
+interface SettingsActions {
+  setConfiguredUsername: (username: string) => void;
+  setRefreshInterval: (minutes: number) => void;
+  setShowNotifications: (show: boolean) => void;
+  setCompactMode: (compact: boolean) => void;
+  resetSettings: () => void;
+}
+
+const DEFAULT_SETTINGS: SettingsState = {
+  configuredUsername: 'Tvincent724',
+  refreshInterval: 5,
+  showNotifications: true,
+  compactMode: false,
+};
+
+export const useSettingsStore = create<SettingsState & SettingsActions>()(
+  devtools(
+    persist(
+      (set) => ({
+        ...DEFAULT_SETTINGS,
+
+        setConfiguredUsername: (username) => set({ configuredUsername: username }),
+        setRefreshInterval: (minutes) => set({ refreshInterval: minutes }),
+        setShowNotifications: (show) => set({ showNotifications: show }),
+        setCompactMode: (compact) => set({ compactMode: compact }),
+        resetSettings: () => set(DEFAULT_SETTINGS),
+      }),
+      { name: 'wiki-dashboard-settings' }
+    ),
+    { name: 'SettingsStore' }
   )
 );
