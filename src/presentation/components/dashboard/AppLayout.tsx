@@ -45,6 +45,7 @@ import {
   Science as ResearchIcon,
   Star as QualityIcon,
   Groups as CollaborationIcon,
+  Settings as SettingsIcon,
   ExpandLess,
   ExpandMore,
 } from '@mui/icons-material';
@@ -65,6 +66,7 @@ import { TemplatesPanel } from '../templates/TemplatesPanel';
 import { ResearchPanel } from '../research/ResearchPanel';
 import { QualityTrackerPanel } from '../quality/QualityTrackerPanel';
 import { CollaborationPanel } from '../collaboration/CollaborationPanel';
+import { SettingsPanel } from '../settings/SettingsPanel';
 import type { ActiveSection } from '@presentation/hooks';
 
 // === Sidebar Width ===
@@ -135,6 +137,13 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { id: 'collaboration', label: 'Collaboration', icon: <CollaborationIcon /> },
       { id: 'coi', label: 'COI', icon: <GavelIcon /> },
+    ],
+  },
+  {
+    id: 'account',
+    label: 'Account',
+    items: [
+      { id: 'settings', label: 'Settings', icon: <SettingsIcon /> },
     ],
   },
 ];
@@ -350,6 +359,8 @@ function ContentRouter() {
       return <QualityTrackerPanel />;
     case 'collaboration':
       return <CollaborationPanel />;
+    case 'settings':
+      return <SettingsPanel />;
     default:
       return <DashboardOverview />;
   }
