@@ -1,6 +1,7 @@
 /**
  * Analytics Panel Component
  * Displays edit statistics, heatmap, and namespace breakdown
+ * Connected to real Wikipedia APIs via XTools
  */
 
 import { useMemo } from 'react';
@@ -11,6 +12,7 @@ import {
   Grid,
   Typography,
   Skeleton,
+  Alert,
   Tooltip as MuiTooltip,
 } from '@mui/material';
 import {
@@ -30,13 +32,19 @@ import {
 } from 'recharts';
 import CalendarHeatmap, { type ReactCalendarHeatmapValue } from 'react-calendar-heatmap';
 import 'react-calendar-heatmap/dist/styles.css';
-import { format, subDays, eachDayOfInterval } from 'date-fns';
+import { format, subDays } from 'date-fns';
 import { SectionHeader, StatsCard } from '../common';
-import { useDashboard } from '@presentation/hooks/queries';
+import {
+  useDashboard,
+  useEditStreak,
+  useNamespaceTotals,
+  useMonthCounts,
+  useTopEdits,
+} from '@presentation/hooks/queries';
 import { formatEditCount } from '@domain/value-objects';
 import type { NamespaceStats, DailyActivity } from '@domain/entities';
 
-// === Namespace colors ===
+// === Namespace colors and names ===
 const NAMESPACE_COLORS = [
   '#1976d2', // Article (main)
   '#9c27b0', // Talk
@@ -49,45 +57,48 @@ const NAMESPACE_COLORS = [
   '#5d4037', // Other
 ];
 
-// === Mock data generators (will be replaced with API data) ===
-
-function generateMockHeatmapData(): { date: string; count: number }[] {
-  const today = new Date();
-  const startDate = subDays(today, 365);
-  const days = eachDayOfInterval({ start: startDate, end: today });
-
-  return days.map(date => ({
-    date: format(date, 'yyyy-MM-dd'),
-    count: Math.random() > 0.4 ? Math.floor(Math.random() * 15) : 0,
-  }));
-}
-
-function generateMockNamespaceData(): NamespaceStats[] {
-  return [
-    { namespace: 0, namespaceName: 'Article', editCount: 4521, percentage: 45.2 },
-    { namespace: 1, namespaceName: 'Talk', editCount: 1823, percentage: 18.2 },
-    { namespace: 2, namespaceName: 'User', editCount: 1205, percentage: 12.1 },
-    { namespace: 3, namespaceName: 'User talk', editCount: 892, percentage: 8.9 },
-    { namespace: 4, namespaceName: 'Wikipedia', editCount: 612, percentage: 6.1 },
-    { namespace: 10, namespaceName: 'Template', editCount: 421, percentage: 4.2 },
-    { namespace: 118, namespaceName: 'Draft', editCount: 326, percentage: 3.3 },
-    { namespace: -1, namespaceName: 'Other', editCount: 200, percentage: 2.0 },
-  ];
-}
+const NAMESPACE_NAMES: Record<string, string> = {
+  '0': 'Article',
+  '1': 'Talk',
+  '2': 'User',
+  '3': 'User talk',
+  '4': 'Wikipedia',
+  '5': 'Wikipedia talk',
+  '6': 'File',
+  '7': 'File talk',
+  '10': 'Template',
+  '11': 'Template talk',
+  '14': 'Category',
+  '15': 'Category talk',
+  '100': 'Portal',
+  '118': 'Draft',
+  '119': 'Draft talk',
+};
 
 // === Edit Heatmap Component ===
 
 interface EditHeatmapProps {
   data: { date: string; count: number }[];
   loading?: boolean;
+  error?: string | null;
 }
 
-function EditHeatmap({ data, loading }: EditHeatmapProps) {
+function EditHeatmap({ data, loading, error }: EditHeatmapProps) {
   const today = new Date();
   const startDate = subDays(today, 365);
 
   if (loading) {
     return <Skeleton variant="rounded" height={150} />;
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <CardContent>
+          <Alert severity="error">Failed to load edit activity: {error}</Alert>
+        </CardContent>
+      </Card>
+    );
   }
 
   const getColorClass = (value: ReactCalendarHeatmapValue<string> | undefined) => {
@@ -100,41 +111,31 @@ function EditHeatmap({ data, loading }: EditHeatmapProps) {
     return 'color-scale-4';
   };
 
+  const totalEdits = data.reduce((sum, d) => sum + d.count, 0);
+  const activeDays = data.filter(d => d.count > 0).length;
+
   return (
     <Card>
       <CardContent>
-        <Typography variant="h6" gutterBottom>
-          Edit Activity
-        </Typography>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+          <Typography variant="h6">
+            Edit Activity
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {totalEdits.toLocaleString()} edits on {activeDays} days
+          </Typography>
+        </Box>
         <Box
           sx={{
-            '& .react-calendar-heatmap': {
-              width: '100%',
-            },
-            '& .react-calendar-heatmap text': {
-              fontSize: '8px',
-              fill: 'text.secondary',
-            },
-            '& .color-empty': {
-              fill: '#ebedf0',
-            },
-            '& .color-scale-1': {
-              fill: '#9be9a8',
-            },
-            '& .color-scale-2': {
-              fill: '#40c463',
-            },
-            '& .color-scale-3': {
-              fill: '#30a14e',
-            },
-            '& .color-scale-4': {
-              fill: '#216e39',
-            },
-            // Dark mode support
+            '& .react-calendar-heatmap': { width: '100%' },
+            '& .react-calendar-heatmap text': { fontSize: '8px', fill: 'text.secondary' },
+            '& .color-empty': { fill: '#ebedf0' },
+            '& .color-scale-1': { fill: '#9be9a8' },
+            '& .color-scale-2': { fill: '#40c463' },
+            '& .color-scale-3': { fill: '#30a14e' },
+            '& .color-scale-4': { fill: '#216e39' },
             '.MuiPaper-root[style*="dark"] &, [data-theme="dark"] &': {
-              '& .color-empty': {
-                fill: '#161b22',
-              },
+              '& .color-empty': { fill: '#161b22' },
             },
           }}
         >
@@ -152,12 +153,7 @@ function EditHeatmap({ data, loading }: EditHeatmapProps) {
             {['#ebedf0', '#9be9a8', '#40c463', '#30a14e', '#216e39'].map((color) => (
               <Box
                 key={color}
-                sx={{
-                  width: 12,
-                  height: 12,
-                  backgroundColor: color,
-                  borderRadius: 0.5,
-                }}
+                sx={{ width: 12, height: 12, backgroundColor: color, borderRadius: 0.5 }}
               />
             ))}
           </Box>
@@ -180,7 +176,17 @@ function NamespaceChart({ data, loading }: NamespaceChartProps) {
     return <Skeleton variant="rounded" height={300} />;
   }
 
-  // Convert to plain objects for recharts
+  if (data.length === 0) {
+    return (
+      <Card sx={{ height: '100%' }}>
+        <CardContent>
+          <Typography variant="h6" gutterBottom>Namespace Breakdown</Typography>
+          <Typography color="text.secondary">No data available</Typography>
+        </CardContent>
+      </Card>
+    );
+  }
+
   const chartData = data.map(d => ({
     namespaceName: d.namespaceName,
     editCount: d.editCount,
@@ -221,29 +227,24 @@ function NamespaceChart({ data, loading }: NamespaceChartProps) {
 // === Monthly Edits Chart ===
 
 interface MonthlyEditsChartProps {
-  data: readonly DailyActivity[];
+  data: { month: string; edits: number }[];
   loading?: boolean;
 }
 
 function MonthlyEditsChart({ data, loading }: MonthlyEditsChartProps) {
-  // Aggregate by month
-  const monthlyData = useMemo(() => {
-    const months: Record<string, { month: string; edits: number; bytes: number }> = {};
-
-    data.forEach(activity => {
-      const monthKey = format(activity.date, 'MMM yyyy');
-      if (!months[monthKey]) {
-        months[monthKey] = { month: monthKey, edits: 0, bytes: 0 };
-      }
-      months[monthKey].edits += activity.editCount;
-      months[monthKey].bytes += activity.bytesAdded;
-    });
-
-    return Object.values(months).slice(-12); // Last 12 months
-  }, [data]);
-
   if (loading) {
     return <Skeleton variant="rounded" height={300} />;
+  }
+
+  if (data.length === 0) {
+    return (
+      <Card sx={{ height: '100%' }}>
+        <CardContent>
+          <Typography variant="h6" gutterBottom>Monthly Activity</Typography>
+          <Typography color="text.secondary">No data available</Typography>
+        </CardContent>
+      </Card>
+    );
   }
 
   return (
@@ -253,7 +254,7 @@ function MonthlyEditsChart({ data, loading }: MonthlyEditsChartProps) {
           Monthly Activity
         </Typography>
         <ResponsiveContainer width="100%" height={250}>
-          <BarChart data={monthlyData}>
+          <BarChart data={data}>
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="month" tick={{ fontSize: 11 }} />
             <YAxis tick={{ fontSize: 11 }} />
@@ -274,7 +275,6 @@ interface EditTrendChartProps {
 }
 
 function EditTrendChart({ data, loading }: EditTrendChartProps) {
-  // Get last 30 days
   const recentData = useMemo(() => {
     return data.slice(-30).map(d => ({
       date: format(d.date, 'MMM d'),
@@ -285,6 +285,17 @@ function EditTrendChart({ data, loading }: EditTrendChartProps) {
 
   if (loading) {
     return <Skeleton variant="rounded" height={200} />;
+  }
+
+  if (recentData.length === 0) {
+    return (
+      <Card>
+        <CardContent>
+          <Typography variant="h6" gutterBottom>Last 30 Days</Typography>
+          <Typography color="text.secondary">No recent activity</Typography>
+        </CardContent>
+      </Card>
+    );
   }
 
   return (
@@ -331,6 +342,17 @@ function TopArticles({ articles, loading }: TopArticlesProps) {
     return <Skeleton variant="rounded" height={300} />;
   }
 
+  if (articles.length === 0) {
+    return (
+      <Card sx={{ height: '100%' }}>
+        <CardContent>
+          <Typography variant="h6" gutterBottom>Most Edited Articles</Typography>
+          <Typography color="text.secondary">No data available</Typography>
+        </CardContent>
+      </Card>
+    );
+  }
+
   const maxEdits = Math.max(...articles.map(a => a.editCount));
 
   return (
@@ -343,13 +365,22 @@ function TopArticles({ articles, loading }: TopArticlesProps) {
           {articles.map((article, index) => (
             <Box key={article.title}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                <MuiTooltip title={article.title}>
-                  <Typography variant="body2" noWrap sx={{ maxWidth: '70%' }}>
+                <MuiTooltip title={`Open ${article.title} on Wikipedia`}>
+                  <Typography
+                    variant="body2"
+                    noWrap
+                    sx={{
+                      maxWidth: '70%',
+                      cursor: 'pointer',
+                      '&:hover': { color: 'primary.main' },
+                    }}
+                    onClick={() => window.open(`https://en.wikipedia.org/wiki/${encodeURIComponent(article.title)}`, '_blank')}
+                  >
                     {index + 1}. {article.title}
                   </Typography>
                 </MuiTooltip>
                 <Typography variant="body2" color="text.secondary">
-                  {article.editCount}
+                  {article.editCount} edits
                 </Typography>
               </Box>
               <Box
@@ -380,32 +411,115 @@ function TopArticles({ articles, loading }: TopArticlesProps) {
 // === Main Analytics Panel ===
 
 export function AnalyticsPanel() {
-  const { data: dashboard, isLoading } = useDashboard();
+  const { data: dashboard, isLoading: dashboardLoading } = useDashboard();
+  const { data: editStreakData, isLoading: streakLoading, error: streakError } = useEditStreak();
+  const { data: namespaceTotals, isLoading: namespaceLoading } = useNamespaceTotals();
+  const { data: monthCounts, isLoading: monthLoading } = useMonthCounts();
+  const { data: topEditsRaw, isLoading: topEditsLoading } = useTopEdits();
 
-  // Generate mock data (will be replaced with real API calls)
-  const heatmapData = useMemo(() => generateMockHeatmapData(), []);
-  const namespaceData = useMemo(() => generateMockNamespaceData(), []);
+  // Transform edit streak data into heatmap format
+  const heatmapData = useMemo(() => {
+    if (!editStreakData?.dates) return [];
 
-  // Mock top articles
-  const topArticles: TopArticle[] = useMemo(() => [
-    { title: 'Artificial intelligence', editCount: 87 },
-    { title: 'Machine learning', editCount: 64 },
-    { title: 'Neural network', editCount: 52 },
-    { title: 'Deep learning', editCount: 41 },
-    { title: 'Computer vision', editCount: 38 },
-  ], []);
+    // Create a map of dates with edits
+    const dateMap = new Map<string, number>();
+
+    // Count edits per date from the streak data
+    // The API returns dates that have edits, so we mark those
+    editStreakData.dates.forEach(date => {
+      dateMap.set(date, (dateMap.get(date) || 0) + 1);
+    });
+
+    // Generate all dates for the past year
+    const today = new Date();
+    const result: { date: string; count: number }[] = [];
+
+    for (let i = 365; i >= 0; i--) {
+      const date = new Date(today);
+      date.setDate(date.getDate() - i);
+      const dateStr = date.toISOString().split('T')[0] ?? '';
+      result.push({
+        date: dateStr,
+        count: dateMap.get(dateStr) || 0,
+      });
+    }
+
+    return result;
+  }, [editStreakData]);
+
+  // Transform namespace data
+  const namespaceData: NamespaceStats[] = useMemo(() => {
+    if (!namespaceTotals) return [];
+
+    const total = Object.values(namespaceTotals).reduce((sum, count) => sum + count, 0);
+
+    return Object.entries(namespaceTotals)
+      .map(([ns, count]) => ({
+        namespace: parseInt(ns, 10),
+        namespaceName: NAMESPACE_NAMES[ns] || `ns:${ns}`,
+        editCount: count,
+        percentage: total > 0 ? Math.round((count / total) * 1000) / 10 : 0,
+      }))
+      .sort((a, b) => b.editCount - a.editCount)
+      .slice(0, 8); // Top 8 namespaces
+  }, [namespaceTotals]);
+
+  // Transform monthly data
+  const monthlyData = useMemo(() => {
+    if (!monthCounts) return [];
+
+    return Object.entries(monthCounts)
+      .map(([yearMonth, count]) => {
+        // yearMonth is in format "2024-01"
+        const parts = yearMonth.split('-');
+        const year = parts[0] ?? '';
+        const month = parts[1] ?? '01';
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const monthIndex = parseInt(month, 10) - 1;
+        return {
+          month: `${monthNames[monthIndex] ?? 'Unknown'} ${year.slice(2)}`,
+          edits: count,
+          sortKey: yearMonth,
+        };
+      })
+      .sort((a, b) => a.sortKey.localeCompare(b.sortKey))
+      .slice(-12) // Last 12 months
+      .map(({ month, edits }) => ({ month, edits }));
+  }, [monthCounts]);
+
+  // Transform top edits data
+  const topArticles: TopArticle[] = useMemo(() => {
+    if (!topEditsRaw) return [];
+
+    return topEditsRaw
+      .filter(edit => edit.page_namespace === 0) // Only mainspace articles
+      .slice(0, 10)
+      .map(edit => ({
+        title: edit.page_title.replace(/_/g, ' '),
+        editCount: edit.count,
+      }));
+  }, [topEditsRaw]);
 
   const stats = dashboard?.stats;
   const totalEdits = stats?.totalEdits ?? 0;
   const articlesCreated = stats?.articlesCreated ?? 0;
   const recentActivity = stats?.recentActivity ?? [];
 
+  const isLoading = dashboardLoading || streakLoading || namespaceLoading || monthLoading || topEditsLoading;
+
   return (
     <Box sx={{ p: 2 }}>
       <SectionHeader
         title="Analytics"
-        subtitle="Your editing statistics and activity patterns"
+        subtitle="Your editing statistics and activity patterns from Wikipedia"
       />
+
+      {/* Edit Streak Info */}
+      {editStreakData && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          Current streak: <strong>{editStreakData.currentStreak} days</strong> | Longest streak: <strong>{editStreakData.longestStreak} days</strong>
+        </Alert>
+      )}
 
       {/* Stats Summary */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
@@ -413,52 +527,56 @@ export function AnalyticsPanel() {
           <StatsCard
             title="Total Edits"
             value={formatEditCount(totalEdits)}
-            loading={isLoading}
+            loading={dashboardLoading}
           />
         </Grid>
         <Grid item xs={6} sm={3}>
           <StatsCard
             title="Articles Created"
             value={articlesCreated.toString()}
-            loading={isLoading}
+            loading={dashboardLoading}
           />
         </Grid>
         <Grid item xs={6} sm={3}>
           <StatsCard
             title="Major Expansions"
             value={formatEditCount(stats?.majorExpansions ?? 0)}
-            loading={isLoading}
+            loading={dashboardLoading}
           />
         </Grid>
         <Grid item xs={6} sm={3}>
           <StatsCard
             title="Talk Page Posts"
             value={formatEditCount(stats?.talkPagePosts ?? 0)}
-            loading={isLoading}
+            loading={dashboardLoading}
           />
         </Grid>
       </Grid>
 
       {/* Heatmap */}
       <Box sx={{ mb: 3 }}>
-        <EditHeatmap data={heatmapData} loading={isLoading} />
+        <EditHeatmap
+          data={heatmapData}
+          loading={streakLoading}
+          error={streakError ? String(streakError) : null}
+        />
       </Box>
 
       {/* Recent trend */}
       <Box sx={{ mb: 3 }}>
-        <EditTrendChart data={recentActivity} loading={isLoading} />
+        <EditTrendChart data={recentActivity} loading={dashboardLoading} />
       </Box>
 
       {/* Charts Grid */}
       <Grid container spacing={2}>
         <Grid item xs={12} md={6}>
-          <NamespaceChart data={namespaceData} loading={isLoading} />
+          <NamespaceChart data={namespaceData} loading={namespaceLoading || isLoading} />
         </Grid>
         <Grid item xs={12} md={6}>
-          <MonthlyEditsChart data={recentActivity} loading={isLoading} />
+          <MonthlyEditsChart data={monthlyData} loading={monthLoading || isLoading} />
         </Grid>
         <Grid item xs={12} md={6}>
-          <TopArticles articles={topArticles} loading={isLoading} />
+          <TopArticles articles={topArticles} loading={topEditsLoading || isLoading} />
         </Grid>
       </Grid>
     </Box>

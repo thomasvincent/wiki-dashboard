@@ -1,6 +1,7 @@
 /**
  * Achievements Panel Component
  * Displays edit streaks, milestones, barnstars, and gamification elements
+ * Connected to real Wikipedia APIs
  */
 
 import { useMemo } from 'react';
@@ -16,6 +17,7 @@ import {
   Paper,
   Skeleton,
   Tooltip,
+  Alert,
 } from '@mui/material';
 import {
   LocalFireDepartment as StreakIcon,
@@ -26,11 +28,17 @@ import {
   Article as ArticleIcon,
   WorkspacePremium as BadgeIcon,
 } from '@mui/icons-material';
-import { format, differenceInDays } from 'date-fns';
+import { format } from 'date-fns';
 import { SectionHeader } from '../common';
-import { useDashboard } from '@presentation/hooks/queries';
+import {
+  useDashboard,
+  useEditStreak,
+  useThanksReceived,
+  useThanksGiven,
+  useArticlesCreated,
+} from '@presentation/hooks/queries';
 import { formatEditCount } from '@domain/value-objects';
-import type { EditStreak, Milestone, Barnstar } from '@domain/entities';
+import type { Milestone } from '@domain/entities';
 
 // === Milestone icon mapping ===
 const MILESTONE_ICONS: Record<string, React.ReactNode> = {
@@ -42,131 +50,67 @@ const MILESTONE_ICONS: Record<string, React.ReactNode> = {
   'streak': <StreakIcon />,
 };
 
-// === Mock data (will be replaced with API data) ===
-
-const mockEditStreak: EditStreak = {
-  currentStreak: 7,
-  longestStreak: 42,
-  lastEditDate: new Date(),
-  streakStartDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
-};
-
-const mockMilestones: Milestone[] = [
-  {
-    type: 'edit-count',
-    name: 'First Edit',
-    count: 1,
-    achievedAt: new Date('2020-01-15'),
-    icon: 'edit',
-    description: 'Made your first edit',
-  },
-  {
-    type: 'edit-count',
-    name: '100 Edits',
-    count: 100,
-    achievedAt: new Date('2020-03-20'),
-    icon: 'edit',
-    description: 'Reached 100 edits',
-  },
-  {
-    type: 'edit-count',
-    name: '1,000 Edits',
-    count: 1000,
-    achievedAt: new Date('2021-06-10'),
-    icon: 'edit',
-    description: 'Reached 1,000 edits',
-  },
-  {
-    type: 'edit-count',
-    name: '10,000 Edits',
-    count: 10000,
-    achievedAt: null,
-    icon: 'edit',
-    description: 'Reach 10,000 edits',
-  },
-  {
-    type: 'article-created',
-    name: 'Article Creator',
-    count: 1,
-    achievedAt: new Date('2020-05-01'),
-    icon: 'article',
-    description: 'Created your first article',
-  },
-  {
-    type: 'article-created',
-    name: 'Prolific Creator',
-    count: 10,
-    achievedAt: new Date('2022-08-15'),
-    icon: 'article',
-    description: 'Created 10 articles',
-  },
-  {
-    type: 'first-ga',
-    name: 'Good Article',
-    count: 1,
-    achievedAt: null,
-    icon: 'star',
-    description: 'Have an article reach GA status',
-  },
-  {
-    type: 'thanks-received',
-    name: 'Appreciated',
-    count: 10,
-    achievedAt: new Date('2020-06-25'),
-    icon: 'thanks',
-    description: 'Received 10 thanks',
-  },
-  {
-    type: 'streak',
-    name: 'Week Warrior',
-    count: 7,
-    achievedAt: new Date('2023-02-14'),
-    icon: 'streak',
-    description: 'Edit for 7 consecutive days',
-  },
-  {
-    type: 'streak',
-    name: 'Month Master',
-    count: 30,
-    achievedAt: null,
-    icon: 'streak',
-    description: 'Edit for 30 consecutive days',
-  },
+// === Milestone definitions based on common Wikipedia achievements ===
+const EDIT_MILESTONES = [
+  { count: 1, name: 'First Edit', description: 'Made your first edit' },
+  { count: 100, name: '100 Edits', description: 'Reached 100 edits' },
+  { count: 500, name: '500 Edits', description: 'Reached 500 edits' },
+  { count: 1000, name: '1,000 Edits', description: 'Reached 1,000 edits' },
+  { count: 5000, name: '5,000 Edits', description: 'Reached 5,000 edits' },
+  { count: 10000, name: '10,000 Edits', description: 'Reached 10,000 edits' },
+  { count: 50000, name: '50,000 Edits', description: 'Reached 50,000 edits' },
+  { count: 100000, name: '100,000 Edits', description: 'Reached 100,000 edits' },
 ];
 
-const mockBarnstars: Barnstar[] = [
-  {
-    id: '1',
-    name: 'The Original Barnstar',
-    imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/7e/Original_Barnstar_Hires.png/100px-Original_Barnstar_Hires.png',
-    givenBy: 'ExampleUser',
-    date: new Date('2023-05-15'),
-    reason: 'For your excellent work expanding articles on machine learning',
-  },
-  {
-    id: '2',
-    name: 'The Copyeditor\'s Barnstar',
-    imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/87/Copyeditor_Barnstar_Hires.png/100px-Copyeditor_Barnstar_Hires.png',
-    givenBy: 'AnotherEditor',
-    date: new Date('2023-08-22'),
-    reason: 'For meticulous copyediting work across multiple articles',
-  },
+const ARTICLE_MILESTONES = [
+  { count: 1, name: 'Article Creator', description: 'Created your first article' },
+  { count: 5, name: 'Contributor', description: 'Created 5 articles' },
+  { count: 10, name: 'Prolific Creator', description: 'Created 10 articles' },
+  { count: 25, name: 'Article Expert', description: 'Created 25 articles' },
+  { count: 50, name: 'Wikipedia Builder', description: 'Created 50 articles' },
+  { count: 100, name: 'Content Legend', description: 'Created 100 articles' },
+];
+
+const STREAK_MILESTONES = [
+  { count: 7, name: 'Week Warrior', description: 'Edit for 7 consecutive days' },
+  { count: 14, name: 'Fortnight Fighter', description: 'Edit for 14 consecutive days' },
+  { count: 30, name: 'Month Master', description: 'Edit for 30 consecutive days' },
+  { count: 100, name: 'Century Streak', description: 'Edit for 100 consecutive days' },
+  { count: 365, name: 'Year of Dedication', description: 'Edit for 365 consecutive days' },
+];
+
+const THANKS_MILESTONES = [
+  { count: 10, name: 'Appreciated', description: 'Received 10 thanks' },
+  { count: 50, name: 'Well Liked', description: 'Received 50 thanks' },
+  { count: 100, name: 'Community Favorite', description: 'Received 100 thanks' },
+  { count: 500, name: 'Beloved Editor', description: 'Received 500 thanks' },
 ];
 
 // === Edit Streak Card ===
 
 interface EditStreakCardProps {
-  streak: EditStreak;
+  currentStreak: number;
+  longestStreak: number;
   loading?: boolean;
+  error?: Error | null;
 }
 
-function EditStreakCard({ streak, loading }: EditStreakCardProps) {
+function EditStreakCard({ currentStreak, longestStreak, loading, error }: EditStreakCardProps) {
   if (loading) {
     return <Skeleton variant="rounded" height={180} />;
   }
 
-  const streakDays = streak.currentStreak;
-  const isActive = streak.lastEditDate && differenceInDays(new Date(), streak.lastEditDate) <= 1;
+  if (error) {
+    return (
+      <Card sx={{ height: '100%' }}>
+        <CardContent>
+          <Alert severity="error" sx={{ mb: 1 }}>Failed to load streak data</Alert>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const isActive = currentStreak > 0;
 
   return (
     <Card sx={{ height: '100%' }}>
@@ -175,24 +119,16 @@ function EditStreakCard({ streak, loading }: EditStreakCardProps) {
           <StreakIcon sx={{ color: isActive ? 'warning.main' : 'text.secondary' }} />
           <Typography variant="h6">Edit Streak</Typography>
           {isActive && (
-            <Chip
-              label="Active"
-              size="small"
-              color="warning"
-              sx={{ ml: 'auto' }}
-            />
+            <Chip label="Active" size="small" color="warning" sx={{ ml: 'auto' }} />
           )}
         </Box>
 
         <Box sx={{ textAlign: 'center', py: 2 }}>
           <Typography
             variant="h2"
-            sx={{
-              fontWeight: 700,
-              color: isActive ? 'warning.main' : 'text.secondary',
-            }}
+            sx={{ fontWeight: 700, color: isActive ? 'warning.main' : 'text.secondary' }}
           >
-            {streakDays}
+            {currentStreak}
           </Typography>
           <Typography variant="body2" color="text.secondary">
             days in a row
@@ -205,15 +141,15 @@ function EditStreakCard({ streak, loading }: EditStreakCardProps) {
               Longest Streak
             </Typography>
             <Typography variant="body1" fontWeight={500}>
-              {streak.longestStreak} days
+              {longestStreak} days
             </Typography>
           </Box>
           <Box sx={{ textAlign: 'right' }}>
             <Typography variant="caption" color="text.secondary">
-              Started
+              Status
             </Typography>
             <Typography variant="body1" fontWeight={500}>
-              {streak.streakStartDate ? format(streak.streakStartDate, 'MMM d') : 'N/A'}
+              {isActive ? 'Keep it up!' : 'Start editing!'}
             </Typography>
           </Box>
         </Box>
@@ -226,18 +162,22 @@ function EditStreakCard({ streak, loading }: EditStreakCardProps) {
 
 interface MilestoneProgressProps {
   currentValue: number;
-  milestones: Milestone[];
+  milestones: Array<{ count: number; name: string; description: string }>;
+  type: string;
   loading?: boolean;
 }
 
-function MilestoneProgress({ currentValue, milestones, loading }: MilestoneProgressProps) {
+function MilestoneProgress({ currentValue, milestones, type, loading }: MilestoneProgressProps) {
   if (loading) {
     return <Skeleton variant="rounded" height={200} />;
   }
 
   // Find next unachieved milestone
-  const nextMilestone = milestones.find(m => !m.achievedAt);
-  const progress = nextMilestone ? (currentValue / nextMilestone.count) * 100 : 100;
+  const nextMilestone = milestones.find(m => m.count > currentValue);
+  const prevMilestone = [...milestones].reverse().find(m => m.count <= currentValue);
+  const progress = nextMilestone
+    ? ((currentValue - (prevMilestone?.count || 0)) / (nextMilestone.count - (prevMilestone?.count || 0))) * 100
+    : 100;
 
   return (
     <Card sx={{ height: '100%' }}>
@@ -250,7 +190,7 @@ function MilestoneProgress({ currentValue, milestones, loading }: MilestoneProgr
           <>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
               <Avatar sx={{ bgcolor: 'primary.main' }}>
-                {MILESTONE_ICONS[nextMilestone.type] || <BadgeIcon />}
+                {MILESTONE_ICONS[type] || <BadgeIcon />}
               </Avatar>
               <Box sx={{ flex: 1 }}>
                 <Typography variant="body1" fontWeight={500}>
@@ -344,9 +284,7 @@ function MilestonesGrid({ milestones, loading }: MilestonesGridProps) {
                       bgcolor: isAchieved ? 'primary.main' : 'transparent',
                       color: isAchieved ? 'primary.contrastText' : 'text.primary',
                       transition: 'all 0.2s',
-                      '&:hover': {
-                        borderColor: 'primary.main',
-                      },
+                      '&:hover': { borderColor: 'primary.main' },
                     }}
                   >
                     <Box sx={{ mb: 1 }}>
@@ -365,87 +303,6 @@ function MilestonesGrid({ milestones, loading }: MilestonesGridProps) {
               </Grid>
             );
           })}
-        </Grid>
-      </CardContent>
-    </Card>
-  );
-}
-
-// === Barnstar Collection ===
-
-interface BarnstarCollectionProps {
-  barnstars: Barnstar[];
-  loading?: boolean;
-}
-
-function BarnstarCollection({ barnstars, loading }: BarnstarCollectionProps) {
-  if (loading) {
-    return <Skeleton variant="rounded" height={200} />;
-  }
-
-  if (barnstars.length === 0) {
-    return (
-      <Card>
-        <CardContent>
-          <Typography variant="h6" gutterBottom>
-            Barnstar Collection
-          </Typography>
-          <Box sx={{ textAlign: 'center', py: 3, color: 'text.secondary' }}>
-            <StarIcon sx={{ fontSize: 48, opacity: 0.5, mb: 1 }} />
-            <Typography variant="body2">
-              No barnstars yet. Keep contributing!
-            </Typography>
-          </Box>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return (
-    <Card>
-      <CardContent>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-          <StarIcon sx={{ color: 'warning.main' }} />
-          <Typography variant="h6">Barnstar Collection</Typography>
-          <Chip label={barnstars.length} size="small" sx={{ ml: 'auto' }} />
-        </Box>
-
-        <Grid container spacing={2}>
-          {barnstars.map((barnstar) => (
-            <Grid item xs={12} sm={6} key={barnstar.id}>
-              <Paper variant="outlined" sx={{ p: 2 }}>
-                <Box sx={{ display: 'flex', gap: 2 }}>
-                  <Box
-                    component="img"
-                    src={barnstar.imageUrl}
-                    alt={barnstar.name}
-                    sx={{ width: 60, height: 60, objectFit: 'contain' }}
-                  />
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography variant="body2" fontWeight={500}>
-                      {barnstar.name}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      From {barnstar.givenBy} - {format(barnstar.date, 'MMM d, yyyy')}
-                    </Typography>
-                    <Typography
-                      variant="caption"
-                      color="text.secondary"
-                      sx={{
-                        display: 'block',
-                        mt: 0.5,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {barnstar.reason}
-                    </Typography>
-                  </Box>
-                </Box>
-              </Paper>
-            </Grid>
-          ))}
         </Grid>
       </CardContent>
     </Card>
@@ -503,51 +360,171 @@ function ThanksStats({ thanksReceived, thanksGiven, loading }: ThanksStatsProps)
 // === Main Achievements Panel ===
 
 export function AchievementsPanel() {
-  const { data: dashboard, isLoading } = useDashboard();
+  const { data: dashboard, isLoading: dashboardLoading } = useDashboard();
+  const { data: editStreakData, isLoading: streakLoading, error: streakError } = useEditStreak();
+  const { data: thanksReceivedData, isLoading: thanksReceivedLoading } = useThanksReceived();
+  const { data: thanksGivenData, isLoading: thanksGivenLoading } = useThanksGiven();
+  const { data: articlesCreatedData, isLoading: articlesLoading } = useArticlesCreated();
 
   const totalEdits = dashboard?.stats.totalEdits ?? 0;
+  const articlesCreated = articlesCreatedData?.length ?? 0;
+  const thanksReceived = thanksReceivedData?.length ?? 0;
+  const thanksGiven = thanksGivenData?.length ?? 0;
+  const currentStreak = editStreakData?.currentStreak ?? 0;
+  const longestStreak = editStreakData?.longestStreak ?? 0;
 
-  // Filter milestones by type for progress tracking
-  const editMilestones = useMemo(
-    () => mockMilestones.filter(m => m.type === 'edit-count'),
-    []
-  );
+  // Build milestones based on actual data
+  const milestones: Milestone[] = useMemo(() => {
+    const result: Milestone[] = [];
+    const registrationDate = dashboard?.user.registrationDate;
+
+    // Edit milestones
+    EDIT_MILESTONES.forEach(m => {
+      result.push({
+        type: 'edit-count',
+        name: m.name,
+        count: m.count,
+        achievedAt: totalEdits >= m.count ? (registrationDate || new Date()) : null,
+        icon: 'edit',
+        description: m.description,
+      });
+    });
+
+    // Article milestones
+    ARTICLE_MILESTONES.forEach(m => {
+      result.push({
+        type: 'article-created',
+        name: m.name,
+        count: m.count,
+        achievedAt: articlesCreated >= m.count ? (registrationDate || new Date()) : null,
+        icon: 'article',
+        description: m.description,
+      });
+    });
+
+    // Streak milestones
+    STREAK_MILESTONES.forEach(m => {
+      result.push({
+        type: 'streak',
+        name: m.name,
+        count: m.count,
+        achievedAt: longestStreak >= m.count ? new Date() : null,
+        icon: 'streak',
+        description: m.description,
+      });
+    });
+
+    // Thanks milestones
+    THANKS_MILESTONES.forEach(m => {
+      result.push({
+        type: 'thanks-received',
+        name: m.name,
+        count: m.count,
+        achievedAt: thanksReceived >= m.count ? new Date() : null,
+        icon: 'thanks',
+        description: m.description,
+      });
+    });
+
+    return result;
+  }, [totalEdits, articlesCreated, longestStreak, thanksReceived, dashboard?.user.registrationDate]);
+
+  const isLoading = dashboardLoading || streakLoading || thanksReceivedLoading || thanksGivenLoading || articlesLoading;
+
+  // Count achieved milestones
+  const achievedCount = milestones.filter(m => m.achievedAt).length;
 
   return (
     <Box sx={{ p: 2 }}>
       <SectionHeader
         title="Achievements"
-        subtitle="Your editing milestones and recognition"
+        subtitle={`${achievedCount} of ${milestones.length} milestones achieved`}
       />
+
+      {/* Data source info */}
+      <Alert severity="info" sx={{ mb: 2 }}>
+        Achievement data is fetched live from Wikipedia. Some historical dates may be approximated.
+      </Alert>
 
       <Grid container spacing={2}>
         {/* Streak and Progress */}
         <Grid item xs={12} md={4}>
-          <EditStreakCard streak={mockEditStreak} loading={isLoading} />
+          <EditStreakCard
+            currentStreak={currentStreak}
+            longestStreak={longestStreak}
+            loading={streakLoading}
+            error={streakError}
+          />
         </Grid>
         <Grid item xs={12} md={4}>
           <MilestoneProgress
             currentValue={totalEdits}
-            milestones={editMilestones}
-            loading={isLoading}
+            milestones={EDIT_MILESTONES}
+            type="edit-count"
+            loading={dashboardLoading}
           />
         </Grid>
         <Grid item xs={12} md={4}>
           <ThanksStats
-            thanksReceived={47}
-            thanksGiven={23}
-            loading={isLoading}
+            thanksReceived={thanksReceived}
+            thanksGiven={thanksGiven}
+            loading={thanksReceivedLoading || thanksGivenLoading}
           />
+        </Grid>
+
+        {/* Quick Stats */}
+        <Grid item xs={6} sm={3}>
+          <Card>
+            <CardContent sx={{ textAlign: 'center' }}>
+              <Typography variant="h4" fontWeight={600} color="primary.main">
+                {formatEditCount(totalEdits)}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Total Edits
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={6} sm={3}>
+          <Card>
+            <CardContent sx={{ textAlign: 'center' }}>
+              <Typography variant="h4" fontWeight={600} color="success.main">
+                {articlesCreated}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Articles Created
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={6} sm={3}>
+          <Card>
+            <CardContent sx={{ textAlign: 'center' }}>
+              <Typography variant="h4" fontWeight={600} color="warning.main">
+                {longestStreak}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Longest Streak
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={6} sm={3}>
+          <Card>
+            <CardContent sx={{ textAlign: 'center' }}>
+              <Typography variant="h4" fontWeight={600} color="info.main">
+                {achievedCount}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Badges Earned
+              </Typography>
+            </CardContent>
+          </Card>
         </Grid>
 
         {/* Milestones Grid */}
         <Grid item xs={12}>
-          <MilestonesGrid milestones={mockMilestones} loading={isLoading} />
-        </Grid>
-
-        {/* Barnstars */}
-        <Grid item xs={12}>
-          <BarnstarCollection barnstars={mockBarnstars} loading={isLoading} />
+          <MilestonesGrid milestones={milestones} loading={isLoading} />
         </Grid>
       </Grid>
     </Box>

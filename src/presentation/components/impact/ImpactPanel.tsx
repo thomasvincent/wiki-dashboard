@@ -1,6 +1,6 @@
 /**
  * Impact Panel Component
- * Display article views and reach metrics
+ * Display article views and reach metrics from Wikimedia Analytics API
  */
 
 import { useMemo } from 'react';
@@ -16,6 +16,7 @@ import {
   Paper,
   Typography,
   Skeleton,
+  Alert,
 } from '@mui/material';
 import {
   Visibility as ViewsIcon,
@@ -35,70 +36,22 @@ import {
   Bar,
 } from 'recharts';
 import { SectionHeader, StatsCard } from '../common';
-import { useDashboard } from '@presentation/hooks/queries';
+import {
+  useDashboard,
+  useArticlesCreated,
+  useImpactMetrics,
+} from '@presentation/hooks/queries';
 import { formatEditCount } from '@domain/value-objects';
-import type { PageViewStats, ImpactMetrics } from '@domain/entities';
-
-// === Helper function ===
-function generateDailyViews(baseViews: number, variance: number): readonly { date: string; views: number }[] {
-  return Array.from({ length: 30 }, (_, i) => ({
-    date: new Date(Date.now() - (29 - i) * 24 * 60 * 60 * 1000).toISOString().split('T')[0] as string,
-    views: Math.floor(baseViews + Math.random() * variance),
-  }));
-}
-
-// === Mock data ===
-const mockImpactMetrics: ImpactMetrics = {
-  articlesCreated: 12,
-  totalPageViews: 2450000,
-  averageViewsPerArticle: 204166,
-  articleSurvivalRate: 0.92,
-  mostViewedArticles: [
-    {
-      title: 'Machine learning',
-      views: 850000,
-      period: 'last 30 days',
-      dailyViews: generateDailyViews(20000, 15000),
-    },
-    {
-      title: 'Neural network',
-      views: 620000,
-      period: 'last 30 days',
-      dailyViews: generateDailyViews(15000, 12000),
-    },
-    {
-      title: 'Deep learning',
-      views: 480000,
-      period: 'last 30 days',
-      dailyViews: generateDailyViews(12000, 8000),
-    },
-    {
-      title: 'Computer vision',
-      views: 320000,
-      period: 'last 30 days',
-      dailyViews: generateDailyViews(8000, 6000),
-    },
-    {
-      title: 'Artificial neural network',
-      views: 180000,
-      period: 'last 30 days',
-      dailyViews: generateDailyViews(4000, 4000),
-    },
-  ],
-};
+import type { PageViewsAggregate } from '@infrastructure/api/wikimedia-rest-client';
 
 // === Page Views Chart ===
 
 interface PageViewsChartProps {
-  articles: readonly PageViewStats[];
+  articles: PageViewsAggregate[];
   loading?: boolean;
 }
 
 function PageViewsChart({ articles, loading }: PageViewsChartProps) {
-  if (loading) {
-    return <Skeleton variant="rounded" height={300} />;
-  }
-
   // Aggregate all views by date
   const aggregatedData = useMemo(() => {
     const dateMap: Record<string, number> = {};
@@ -116,6 +69,21 @@ function PageViewsChart({ articles, loading }: PageViewsChartProps) {
         views,
       }));
   }, [articles]);
+
+  if (loading) {
+    return <Skeleton variant="rounded" height={300} />;
+  }
+
+  if (aggregatedData.length === 0) {
+    return (
+      <Card>
+        <CardContent>
+          <Typography variant="h6" gutterBottom>Total Page Views (Last 30 Days)</Typography>
+          <Typography color="text.secondary">No pageview data available</Typography>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card>
@@ -146,7 +114,7 @@ function PageViewsChart({ articles, loading }: PageViewsChartProps) {
 // === Top Articles Bar Chart ===
 
 interface TopArticlesChartProps {
-  articles: readonly PageViewStats[];
+  articles: PageViewsAggregate[];
   loading?: boolean;
 }
 
@@ -155,9 +123,20 @@ function TopArticlesChart({ articles, loading }: TopArticlesChartProps) {
     return <Skeleton variant="rounded" height={300} />;
   }
 
-  const data = articles.map(a => ({
+  if (articles.length === 0) {
+    return (
+      <Card>
+        <CardContent>
+          <Typography variant="h6" gutterBottom>Top Articles by Views</Typography>
+          <Typography color="text.secondary">No data available</Typography>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const data = articles.slice(0, 5).map(a => ({
     title: a.title.length > 20 ? a.title.slice(0, 17) + '...' : a.title,
-    views: a.views,
+    views: a.totalViews,
     fullTitle: a.title,
   }));
 
@@ -184,7 +163,7 @@ function TopArticlesChart({ articles, loading }: TopArticlesChartProps) {
 // === Article List ===
 
 interface ArticleViewsListProps {
-  articles: readonly PageViewStats[];
+  articles: PageViewsAggregate[];
   loading?: boolean;
 }
 
@@ -193,6 +172,7 @@ function ArticleViewsList({ articles, loading }: ArticleViewsListProps) {
     return (
       <Card>
         <CardContent>
+          <Typography variant="h6" gutterBottom>Articles Created</Typography>
           {[1, 2, 3, 4, 5].map(i => (
             <Skeleton key={i} variant="rectangular" height={48} sx={{ mb: 1 }} />
           ))}
@@ -201,16 +181,27 @@ function ArticleViewsList({ articles, loading }: ArticleViewsListProps) {
     );
   }
 
-  const maxViews = Math.max(...articles.map(a => a.views));
+  if (articles.length === 0) {
+    return (
+      <Card>
+        <CardContent>
+          <Typography variant="h6" gutterBottom>Articles Created</Typography>
+          <Typography color="text.secondary">No articles found</Typography>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const maxViews = Math.max(...articles.map(a => a.totalViews), 1);
 
   return (
     <Card>
       <CardContent>
         <Typography variant="h6" gutterBottom>
-          Articles Created
+          Articles Created ({articles.length})
         </Typography>
         <Paper variant="outlined">
-          <List disablePadding>
+          <List disablePadding sx={{ maxHeight: 400, overflow: 'auto' }}>
             {articles.map((article, index) => (
               <Box key={article.title}>
                 {index > 0 && <Box sx={{ borderTop: 1, borderColor: 'divider' }} />}
@@ -230,7 +221,7 @@ function ArticleViewsList({ articles, loading }: ArticleViewsListProps) {
                             {article.title}
                           </Typography>
                           <Typography variant="body2" color="text.secondary">
-                            {formatEditCount(article.views)} views
+                            {formatEditCount(article.totalViews)} views
                           </Typography>
                         </Box>
                       }
@@ -247,12 +238,15 @@ function ArticleViewsList({ articles, loading }: ArticleViewsListProps) {
                             <Box
                               sx={{
                                 height: '100%',
-                                width: `${(article.views / maxViews) * 100}%`,
+                                width: `${(article.totalViews / maxViews) * 100}%`,
                                 bgcolor: 'success.main',
                                 borderRadius: 2,
                               }}
                             />
                           </Box>
+                          <Typography variant="caption" color="text.secondary">
+                            ~{article.averageDaily.toLocaleString()} daily avg
+                          </Typography>
                         </Box>
                       }
                     />
@@ -270,9 +264,28 @@ function ArticleViewsList({ articles, loading }: ArticleViewsListProps) {
 // === Main Impact Panel ===
 
 export function ImpactPanel() {
-  const { isLoading } = useDashboard();
+  const { isLoading: dashboardLoading } = useDashboard();
+  const { data: articlesCreatedData, isLoading: articlesLoading } = useArticlesCreated();
 
-  const metrics = mockImpactMetrics;
+  // Get article titles for pageview fetching
+  const articleTitles = useMemo(() => {
+    return articlesCreatedData?.map(a => a.title) ?? [];
+  }, [articlesCreatedData]);
+
+  // Fetch pageviews for all created articles
+  const { data: impactData, isLoading: impactLoading, error: impactError } = useImpactMetrics(articleTitles, 30);
+
+  const isLoading = dashboardLoading || articlesLoading || impactLoading;
+  const articlesCreated = articlesCreatedData?.length ?? 0;
+
+  // Calculate metrics from real data
+  const totalViews = impactData?.totalViews ?? 0;
+  const topArticles = impactData?.topArticles ?? [];
+  const allArticles = impactData?.articleStats ?? [];
+  const averageViews = articlesCreated > 0 ? Math.round(totalViews / articlesCreated) : 0;
+
+  // Calculate survival rate (articles that still exist / total created)
+  const survivingArticles = allArticles.filter(a => a.totalViews > 0).length;
 
   return (
     <Box sx={{ p: 2 }}>
@@ -281,20 +294,32 @@ export function ImpactPanel() {
         subtitle="Your contribution reach and article performance"
       />
 
+      {/* Error Alert */}
+      {impactError && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          Some pageview data couldn't be loaded. Showing available data.
+        </Alert>
+      )}
+
+      {/* Data source info */}
+      <Alert severity="info" sx={{ mb: 2 }}>
+        Pageview data is fetched live from Wikimedia Analytics API for the last 30 days.
+      </Alert>
+
       {/* Stats Summary */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
         <Grid item xs={6} sm={3}>
           <StatsCard
             title="Articles Created"
-            value={metrics.articlesCreated.toString()}
+            value={articlesCreated.toString()}
             icon={<ArticleIcon />}
-            loading={isLoading}
+            loading={articlesLoading}
           />
         </Grid>
         <Grid item xs={6} sm={3}>
           <StatsCard
             title="Total Views"
-            value={formatEditCount(metrics.totalPageViews)}
+            value={formatEditCount(totalViews)}
             subtitle="Last 30 days"
             icon={<ViewsIcon />}
             loading={isLoading}
@@ -303,7 +328,7 @@ export function ImpactPanel() {
         <Grid item xs={6} sm={3}>
           <StatsCard
             title="Avg per Article"
-            value={formatEditCount(metrics.averageViewsPerArticle)}
+            value={formatEditCount(averageViews)}
             subtitle="Last 30 days"
             icon={<TrendingIcon />}
             loading={isLoading}
@@ -311,9 +336,9 @@ export function ImpactPanel() {
         </Grid>
         <Grid item xs={6} sm={3}>
           <StatsCard
-            title="Survival Rate"
-            value={`${Math.round(metrics.articleSurvivalRate * 100)}%`}
-            subtitle="Articles not deleted"
+            title="With Views"
+            value={`${survivingArticles}/${articlesCreated}`}
+            subtitle="Articles with traffic"
             icon={<ReachIcon />}
             loading={isLoading}
           />
@@ -327,10 +352,14 @@ export function ImpactPanel() {
             <ReachIcon sx={{ fontSize: 48, opacity: 0.8 }} />
             <Box>
               <Typography variant="h4" fontWeight={600}>
-                {formatEditCount(metrics.totalPageViews)} readers reached
+                {isLoading ? (
+                  <Skeleton width={200} sx={{ bgcolor: 'rgba(255,255,255,0.3)' }} />
+                ) : (
+                  `${formatEditCount(totalViews)} readers reached`
+                )}
               </Typography>
               <Typography variant="body2" sx={{ opacity: 0.8 }}>
-                Estimated unique readers who viewed your created articles in the last 30 days
+                Total pageviews across all your created articles in the last 30 days
               </Typography>
             </Box>
           </Box>
@@ -340,24 +369,26 @@ export function ImpactPanel() {
       {/* Charts */}
       <Grid container spacing={2}>
         <Grid item xs={12}>
-          <PageViewsChart articles={metrics.mostViewedArticles} loading={isLoading} />
+          <PageViewsChart articles={allArticles} loading={isLoading} />
         </Grid>
         <Grid item xs={12} md={6}>
-          <TopArticlesChart articles={metrics.mostViewedArticles} loading={isLoading} />
+          <TopArticlesChart articles={topArticles} loading={isLoading} />
         </Grid>
         <Grid item xs={12} md={6}>
-          <ArticleViewsList articles={metrics.mostViewedArticles} loading={isLoading} />
+          <ArticleViewsList articles={allArticles} loading={isLoading} />
         </Grid>
       </Grid>
 
       {/* Note about data */}
-      <Card variant="outlined" sx={{ mt: 2, bgcolor: 'action.hover' }}>
-        <CardContent sx={{ py: 1.5 }}>
-          <Typography variant="body2" color="text.secondary">
-            Page view data provided by Wikimedia Analytics. Connect your Wikipedia account for personalized stats.
-          </Typography>
-        </CardContent>
-      </Card>
+      {!isLoading && articlesCreated === 0 && (
+        <Card variant="outlined" sx={{ mt: 2 }}>
+          <CardContent>
+            <Typography variant="body2" color="text.secondary">
+              Create mainspace articles to see your impact metrics here. Your article creation history is fetched from Wikipedia.
+            </Typography>
+          </CardContent>
+        </Card>
+      )}
     </Box>
   );
 }
