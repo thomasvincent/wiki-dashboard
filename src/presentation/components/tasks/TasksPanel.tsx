@@ -54,7 +54,7 @@ import type { Task, TaskPriority, TaskStatus } from '@domain/entities';
 interface TaskFormProps {
   open: boolean;
   onClose: () => void;
-  task?: Task;
+  task?: Task | undefined;
   onSave: (task: Omit<Task, 'id' | 'createdAt' | 'completedAt'>) => void;
 }
 

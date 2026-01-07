@@ -71,11 +71,13 @@ export function StatusChip({ status, type, ...props }: StatusChipProps) {
       display = { label: status, color: '#757575' };
   }
 
+  const chipIcon = display.icon ? STATUS_ICON_MAP[display.icon] as React.ReactElement : undefined;
+
   return (
     <Chip
       label={display.label}
       size="small"
-      icon={display.icon ? (STATUS_ICON_MAP[display.icon] as React.ReactElement) : undefined}
+      {...(chipIcon ? { icon: chipIcon } : {})}
       sx={{
         backgroundColor: `${display.color}20`,
         color: display.color,
@@ -249,7 +251,7 @@ export function SectionHeader({ title, subtitle, action, onRefresh, loading }: S
       <Box sx={{ display: 'flex', gap: 1 }}>
         {onRefresh && (
           <Tooltip title="Refresh">
-            <IconButton size="small" onClick={onRefresh} disabled={loading}>
+            <IconButton size="small" onClick={onRefresh} disabled={loading ?? false}>
               <RefreshIcon fontSize="small" sx={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
             </IconButton>
           </Tooltip>

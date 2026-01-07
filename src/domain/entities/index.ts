@@ -118,6 +118,197 @@ export interface DailyActivity {
   readonly bytesAdded: number;
 }
 
+// === Watchlist & Notifications ===
+
+export interface WatchlistItem {
+  readonly title: string;
+  readonly ns: number;
+  readonly lastRevisionId: number;
+  readonly lastEditor: string;
+  readonly timestamp: Date;
+  readonly oldLength: number;
+  readonly newLength: number;
+  readonly comment: string;
+  readonly unread: boolean;
+}
+
+export type NotificationType =
+  | 'thank'
+  | 'mention'
+  | 'message'
+  | 'review'
+  | 'edit-milestone'
+  | 'welcome'
+  | 'edit-thank';
+
+export interface WikiNotification {
+  readonly id: string;
+  readonly type: NotificationType;
+  readonly timestamp: Date;
+  readonly title: string | null;
+  readonly agent: string | null;
+  readonly read: boolean;
+  readonly message: string;
+  readonly url: string | null;
+}
+
+// === Gamification & Achievements ===
+
+export type MilestoneType =
+  | 'edit-count'
+  | 'article-created'
+  | 'first-ga'
+  | 'first-fa'
+  | 'thanks-received'
+  | 'streak';
+
+export interface Milestone {
+  readonly type: MilestoneType;
+  readonly name: string;
+  readonly count: number;
+  readonly achievedAt: Date | null;
+  readonly icon: string;
+  readonly description: string;
+}
+
+export interface EditStreak {
+  readonly currentStreak: number;
+  readonly longestStreak: number;
+  readonly lastEditDate: Date | null;
+  readonly streakStartDate: Date | null;
+}
+
+export interface Barnstar {
+  readonly id: string;
+  readonly name: string;
+  readonly imageUrl: string;
+  readonly givenBy: string;
+  readonly date: Date;
+  readonly reason: string;
+}
+
+// === Article Quality ===
+
+export type ArticleClass =
+  | 'stub'
+  | 'start'
+  | 'C'
+  | 'B'
+  | 'GA'
+  | 'FA'
+  | 'FL'
+  | 'A'
+  | 'List'
+  | 'Unassessed';
+
+export type ArticleImportance = 'low' | 'mid' | 'high' | 'top' | 'unknown';
+
+export interface QualityAssessment {
+  readonly title: string;
+  readonly class: ArticleClass;
+  readonly importance: ArticleImportance;
+  readonly projects: readonly string[];
+  readonly assessedAt: Date | null;
+}
+
+export interface QualityNomination {
+  readonly id: string;
+  readonly title: string;
+  readonly type: 'GA' | 'FA' | 'FL' | 'DYK' | 'ITN' | 'peer-review';
+  readonly status: 'pending' | 'under-review' | 'passed' | 'failed';
+  readonly nominatedAt: Date;
+  readonly resolvedAt: Date | null;
+  readonly url: string;
+}
+
+// === Templates ===
+
+export type TemplateCategory =
+  | 'edit-summary'
+  | 'talk-page'
+  | 'welcome'
+  | 'afc-decline'
+  | 'warning'
+  | 'custom';
+
+export interface EditTemplate {
+  readonly id: string;
+  readonly name: string;
+  readonly category: TemplateCategory;
+  readonly content: string;
+  readonly shortcut: string | null;
+  readonly usageCount: number;
+  readonly createdAt: Date;
+}
+
+// === Research Queue ===
+
+export type ResearchPriority = 'high' | 'medium' | 'low';
+
+export interface ResearchItem {
+  readonly id: string;
+  readonly title: string;
+  readonly url: string;
+  readonly notes: string;
+  readonly sources: readonly string[];
+  readonly addedAt: Date;
+  readonly priority: ResearchPriority;
+  readonly completed: boolean;
+}
+
+// === Collaboration ===
+
+export interface WikiProject {
+  readonly name: string;
+  readonly shortname: string;
+  readonly url: string;
+  readonly memberCount: number | null;
+  readonly activeDiscussions: number;
+}
+
+export interface Editathon {
+  readonly id: string;
+  readonly name: string;
+  readonly description: string;
+  readonly startDate: Date;
+  readonly endDate: Date;
+  readonly url: string;
+  readonly participantCount: number;
+  readonly articleCount: number;
+}
+
+// === Impact Metrics ===
+
+export interface PageViewStats {
+  readonly title: string;
+  readonly views: number;
+  readonly period: string;
+  readonly dailyViews: readonly { date: string; views: number }[];
+}
+
+export interface ImpactMetrics {
+  readonly articlesCreated: number;
+  readonly totalPageViews: number;
+  readonly averageViewsPerArticle: number;
+  readonly articleSurvivalRate: number;
+  readonly mostViewedArticles: readonly PageViewStats[];
+}
+
+// === Namespace Stats ===
+
+export interface NamespaceStats {
+  readonly namespace: number;
+  readonly namespaceName: string;
+  readonly editCount: number;
+  readonly percentage: number;
+}
+
+export interface HeatmapData {
+  readonly year: number;
+  readonly data: readonly { date: string; count: number }[];
+  readonly totalEdits: number;
+}
+
 // === Aggregate Root ===
 
 export interface EditorDashboard {

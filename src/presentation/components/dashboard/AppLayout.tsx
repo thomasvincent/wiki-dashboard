@@ -1,10 +1,9 @@
 /**
  * Main App Layout
- * Responsive layout with sidebar navigation
+ * Responsive layout with grouped sidebar navigation
  * Optimized for laptop screens
  */
 
-// React hooks imported at component level
 import {
   Box,
   Drawer,
@@ -23,6 +22,8 @@ import {
   Avatar,
   Tooltip,
   Switch,
+  Collapse,
+  Badge,
 } from '@mui/material';
 import {
   Menu as MenuIcon,
@@ -35,8 +36,19 @@ import {
   DarkMode as DarkModeIcon,
   LightMode as LightModeIcon,
   OpenInNew as OpenInNewIcon,
+  Visibility as WatchlistIcon,
+  Notifications as NotificationsIcon,
+  BarChart as AnalyticsIcon,
+  EmojiEvents as AchievementsIcon,
+  TrendingUp as ImpactIcon,
+  Description as TemplatesIcon,
+  Science as ResearchIcon,
+  Star as QualityIcon,
+  Groups as CollaborationIcon,
+  ExpandLess,
+  ExpandMore,
 } from '@mui/icons-material';
-import { useUIStore } from '@presentation/hooks';
+import { useUIStore, useNotificationStore } from '@presentation/hooks';
 import { useDashboard } from '@presentation/hooks/queries';
 import { DashboardOverview } from '../dashboard/Overview';
 import { DraftsPanel } from '../drafts/DraftsPanel';
@@ -44,6 +56,16 @@ import { ContributionsPanel } from '../contributions/ContributionsPanel';
 import { TasksPanel } from '../tasks/TasksPanel';
 import { FocusAreasPanel } from '../focus-areas/FocusAreasPanel';
 import { CoiDisclosuresPanel } from '../coi/CoiDisclosuresPanel';
+import { WatchlistPanel } from '../watchlist/WatchlistPanel';
+import { NotificationsPanel } from '../notifications/NotificationsPanel';
+import { AnalyticsPanel } from '../analytics/AnalyticsPanel';
+import { AchievementsPanel } from '../achievements/AchievementsPanel';
+import { ImpactPanel } from '../impact/ImpactPanel';
+import { TemplatesPanel } from '../templates/TemplatesPanel';
+import { ResearchPanel } from '../research/ResearchPanel';
+import { QualityTrackerPanel } from '../quality/QualityTrackerPanel';
+import { CollaborationPanel } from '../collaboration/CollaborationPanel';
+import type { ActiveSection } from '@presentation/hooks';
 
 // === Sidebar Width ===
 const DRAWER_WIDTH = 220;
@@ -51,19 +73,70 @@ const DRAWER_WIDTH = 220;
 // === Navigation Items ===
 
 interface NavItem {
-  id: string;
+  id: ActiveSection;
   label: string;
   icon: React.ReactNode;
-  section: 'overview' | 'drafts' | 'contributions' | 'tasks' | 'focus-areas' | 'coi';
+  badge?: boolean;
 }
 
-const NAV_ITEMS: NavItem[] = [
-  { id: 'overview', label: 'Overview', icon: <DashboardIcon />, section: 'overview' },
-  { id: 'drafts', label: 'Drafts', icon: <ArticleIcon />, section: 'drafts' },
-  { id: 'contributions', label: 'Contributions', icon: <EditIcon />, section: 'contributions' },
-  { id: 'tasks', label: 'Tasks', icon: <TaskIcon />, section: 'tasks' },
-  { id: 'focus-areas', label: 'Focus Areas', icon: <FolderIcon />, section: 'focus-areas' },
-  { id: 'coi', label: 'COI Disclosures', icon: <GavelIcon />, section: 'coi' },
+interface NavGroup {
+  id: string;
+  label: string;
+  items: NavItem[];
+}
+
+const NAV_GROUPS: NavGroup[] = [
+  {
+    id: 'dashboard',
+    label: 'Dashboard',
+    items: [
+      { id: 'overview', label: 'Overview', icon: <DashboardIcon /> },
+    ],
+  },
+  {
+    id: 'my-work',
+    label: 'My Work',
+    items: [
+      { id: 'drafts', label: 'Drafts', icon: <ArticleIcon /> },
+      { id: 'contributions', label: 'Contributions', icon: <EditIcon /> },
+      { id: 'tasks', label: 'Tasks', icon: <TaskIcon /> },
+      { id: 'focus-areas', label: 'Focus Areas', icon: <FolderIcon /> },
+    ],
+  },
+  {
+    id: 'monitoring',
+    label: 'Monitoring',
+    items: [
+      { id: 'watchlist', label: 'Watchlist', icon: <WatchlistIcon /> },
+      { id: 'notifications', label: 'Notifications', icon: <NotificationsIcon />, badge: true },
+    ],
+  },
+  {
+    id: 'analytics',
+    label: 'Analytics',
+    items: [
+      { id: 'analytics', label: 'Statistics', icon: <AnalyticsIcon /> },
+      { id: 'achievements', label: 'Achievements', icon: <AchievementsIcon /> },
+      { id: 'impact', label: 'Impact', icon: <ImpactIcon /> },
+    ],
+  },
+  {
+    id: 'tools',
+    label: 'Tools',
+    items: [
+      { id: 'templates', label: 'Templates', icon: <TemplatesIcon /> },
+      { id: 'research', label: 'Research', icon: <ResearchIcon /> },
+      { id: 'quality', label: 'Quality', icon: <QualityIcon /> },
+    ],
+  },
+  {
+    id: 'community',
+    label: 'Community',
+    items: [
+      { id: 'collaboration', label: 'Collaboration', icon: <CollaborationIcon /> },
+      { id: 'coi', label: 'COI', icon: <GavelIcon /> },
+    ],
+  },
 ];
 
 // === Sidebar Component ===
@@ -75,10 +148,11 @@ interface SidebarProps {
 }
 
 function Sidebar({ open, onClose, variant }: SidebarProps) {
-  const { activeSection, setActiveSection, darkMode, toggleDarkMode } = useUIStore();
+  const { activeSection, setActiveSection, darkMode, toggleDarkMode, expandedNavGroups, toggleNavGroup } = useUIStore();
   const { data: dashboard } = useDashboard();
+  const { unreadCount } = useNotificationStore();
 
-  const handleNavigation = (section: NavItem['section']) => {
+  const handleNavigation = (section: ActiveSection) => {
     setActiveSection(section);
     if (variant === 'temporary') {
       onClose();
@@ -116,39 +190,75 @@ function Sidebar({ open, onClose, variant }: SidebarProps) {
 
       <Divider />
 
-      {/* Navigation */}
-      <List sx={{ flex: 1, py: 1 }}>
-        {NAV_ITEMS.map((item) => (
-          <ListItem key={item.id} disablePadding>
-            <ListItemButton
-              selected={activeSection === item.section}
-              onClick={() => handleNavigation(item.section)}
-              sx={{
-                py: 1,
-                px: 2,
-                '&.Mui-selected': {
-                  backgroundColor: 'primary.main',
-                  color: 'primary.contrastText',
-                  '& .MuiListItemIcon-root': {
-                    color: 'primary.contrastText',
-                  },
-                  '&:hover': {
-                    backgroundColor: 'primary.dark',
-                  },
-                },
-              }}
-            >
-              <ListItemIcon sx={{ minWidth: 36 }}>
-                {item.icon}
-              </ListItemIcon>
-              <ListItemText
-                primary={item.label}
-                primaryTypographyProps={{ variant: 'body2' }}
-              />
-            </ListItemButton>
-          </ListItem>
-        ))}
-      </List>
+      {/* Grouped Navigation */}
+      <Box sx={{ flex: 1, overflow: 'auto', py: 0.5 }}>
+        {NAV_GROUPS.map((group) => {
+          const isExpanded = expandedNavGroups.includes(group.id);
+
+          return (
+            <Box key={group.id}>
+              <ListItemButton
+                onClick={() => toggleNavGroup(group.id)}
+                sx={{ py: 0.5, px: 2 }}
+              >
+                <ListItemText
+                  primary={group.label}
+                  primaryTypographyProps={{
+                    variant: 'caption',
+                    fontWeight: 600,
+                    color: 'text.secondary',
+                    textTransform: 'uppercase',
+                    letterSpacing: 0.5,
+                  }}
+                />
+                {isExpanded ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
+              </ListItemButton>
+
+              <Collapse in={isExpanded} timeout="auto" unmountOnExit>
+                <List disablePadding>
+                  {group.items.map((item) => (
+                    <ListItem key={item.id} disablePadding>
+                      <ListItemButton
+                        selected={activeSection === item.id}
+                        onClick={() => handleNavigation(item.id)}
+                        sx={{
+                          py: 0.75,
+                          px: 2,
+                          pl: 3,
+                          '&.Mui-selected': {
+                            backgroundColor: 'primary.main',
+                            color: 'primary.contrastText',
+                            '& .MuiListItemIcon-root': {
+                              color: 'primary.contrastText',
+                            },
+                            '&:hover': {
+                              backgroundColor: 'primary.dark',
+                            },
+                          },
+                        }}
+                      >
+                        <ListItemIcon sx={{ minWidth: 32 }}>
+                          {item.badge ? (
+                            <Badge badgeContent={unreadCount} color="error" max={99}>
+                              {item.icon}
+                            </Badge>
+                          ) : (
+                            item.icon
+                          )}
+                        </ListItemIcon>
+                        <ListItemText
+                          primary={item.label}
+                          primaryTypographyProps={{ variant: 'body2', fontSize: '0.8125rem' }}
+                        />
+                      </ListItemButton>
+                    </ListItem>
+                  ))}
+                </List>
+              </Collapse>
+            </Box>
+          );
+        })}
+      </Box>
 
       <Divider />
 
@@ -222,6 +332,24 @@ function ContentRouter() {
       return <FocusAreasPanel />;
     case 'coi':
       return <CoiDisclosuresPanel />;
+    case 'watchlist':
+      return <WatchlistPanel />;
+    case 'notifications':
+      return <NotificationsPanel />;
+    case 'analytics':
+      return <AnalyticsPanel />;
+    case 'achievements':
+      return <AchievementsPanel />;
+    case 'impact':
+      return <ImpactPanel />;
+    case 'templates':
+      return <TemplatesPanel />;
+    case 'research':
+      return <ResearchPanel />;
+    case 'quality':
+      return <QualityTrackerPanel />;
+    case 'collaboration':
+      return <CollaborationPanel />;
     default:
       return <DashboardOverview />;
   }
