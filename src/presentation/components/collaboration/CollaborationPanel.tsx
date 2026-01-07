@@ -1,6 +1,7 @@
 /**
  * Collaboration Panel Component
  * WikiProjects, editathons, and community engagement
+ * Connected to real Wikipedia API for WikiProject memberships
  */
 
 import { useMemo } from 'react';
@@ -12,6 +13,14 @@ import {
   Chip,
   Grid,
   Typography,
+  Skeleton,
+  Alert,
+  List,
+  ListItem,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
+  Paper,
 } from '@mui/material';
 import {
   Groups as GroupsIcon,
@@ -22,94 +31,72 @@ import {
   TrendingUp as TrendingIcon,
   People as PeopleIcon,
   Article as ArticleIcon,
+  HelpOutline as HelpIcon,
+  School as SchoolIcon,
+  Handshake as HandshakeIcon,
 } from '@mui/icons-material';
 import { format, formatDistanceToNow, isFuture } from 'date-fns';
 import { SectionHeader } from '../common';
-import type { WikiProject, Editathon } from '@domain/entities';
+import { useWikiProjects, useDashboard } from '@presentation/hooks/queries';
+import type { Editathon } from '@domain/entities';
 
-// === Mock data ===
-const mockWikiProjects: WikiProject[] = [
-  {
-    name: 'WikiProject Computing',
-    shortname: 'WP:COMP',
-    url: 'https://en.wikipedia.org/wiki/Wikipedia:WikiProject_Computing',
-    memberCount: 1250,
-    activeDiscussions: 12,
-  },
-  {
-    name: 'WikiProject Artificial Intelligence',
-    shortname: 'WP:AI',
-    url: 'https://en.wikipedia.org/wiki/Wikipedia:WikiProject_Artificial_intelligence',
-    memberCount: 340,
-    activeDiscussions: 8,
-  },
-  {
-    name: 'WikiProject Technology',
-    shortname: 'WP:TECH',
-    url: 'https://en.wikipedia.org/wiki/Wikipedia:WikiProject_Technology',
-    memberCount: 890,
-    activeDiscussions: 5,
-  },
-  {
-    name: 'WikiProject Science',
-    shortname: 'WP:SCI',
-    url: 'https://en.wikipedia.org/wiki/Wikipedia:WikiProject_Science',
-    memberCount: 2100,
-    activeDiscussions: 18,
-  },
-];
-
-const mockEditathons: Editathon[] = [
+// === Featured Editathons (curated list - hard to fetch programmatically) ===
+const featuredEditathons: Editathon[] = [
   {
     id: '1',
-    name: 'AI Week 2026',
-    description: 'Improve articles about artificial intelligence and machine learning',
-    startDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-    endDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
-    url: 'https://en.wikipedia.org/wiki/Wikipedia:AI_Week_2026',
-    participantCount: 45,
+    name: 'Art+Feminism 2026',
+    description: 'Improve coverage of women and the arts on Wikipedia',
+    startDate: new Date('2026-03-01'),
+    endDate: new Date('2026-03-31'),
+    url: 'https://en.wikipedia.org/wiki/Wikipedia:Meetup/ArtAndFeminism',
+    participantCount: 500,
     articleCount: 0,
   },
   {
     id: '2',
-    name: 'Women in Tech Edit-a-thon',
-    description: 'Create and improve articles about women in technology',
-    startDate: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
-    endDate: new Date(Date.now() + 4 * 24 * 60 * 60 * 1000),
-    url: 'https://en.wikipedia.org/wiki/Wikipedia:Women_in_Tech_2026',
-    participantCount: 128,
-    articleCount: 67,
+    name: 'Wiki Loves Monuments',
+    description: 'Annual photo contest for cultural heritage monuments',
+    startDate: new Date('2026-09-01'),
+    endDate: new Date('2026-09-30'),
+    url: 'https://en.wikipedia.org/wiki/Wikipedia:Wiki_Loves_Monuments',
+    participantCount: 10000,
+    articleCount: 0,
   },
   {
     id: '3',
-    name: 'Science Citation Sprint',
-    description: 'Add citations to science articles',
-    startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
-    endDate: new Date(Date.now() - 23 * 24 * 60 * 60 * 1000),
-    url: 'https://en.wikipedia.org/wiki/Wikipedia:Science_Citation_Sprint',
-    participantCount: 89,
-    articleCount: 234,
+    name: '1Lib1Ref',
+    description: 'Librarians adding citations to Wikipedia',
+    startDate: new Date('2026-01-15'),
+    endDate: new Date('2026-02-05'),
+    url: 'https://en.wikipedia.org/wiki/Wikipedia:1Lib1Ref',
+    participantCount: 2000,
+    articleCount: 0,
   },
 ];
 
 // === WikiProject Card ===
 
 interface WikiProjectCardProps {
-  project: WikiProject;
+  projectName: string;
 }
 
-function WikiProjectCard({ project }: WikiProjectCardProps) {
+function WikiProjectCard({ projectName }: WikiProjectCardProps) {
+  // Format project name for URL and display
+  const formattedName = projectName.replace(/^Wikipedia:WikiProject\s*/, '');
+  const projectUrl = `https://en.wikipedia.org/wiki/${encodeURIComponent(projectName)}`;
+
   return (
     <Card variant="outlined" sx={{ height: '100%' }}>
       <CardContent>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
-          <Box>
+          <Box sx={{ flex: 1 }}>
             <Typography variant="body1" fontWeight={500}>
-              {project.name}
+              {formattedName}
             </Typography>
             <Chip
-              label={project.shortname}
+              label="Member"
               size="small"
+              color="primary"
               variant="outlined"
               sx={{ mt: 0.5, height: 20, fontSize: '0.65rem' }}
             />
@@ -117,25 +104,29 @@ function WikiProjectCard({ project }: WikiProjectCardProps) {
           <Button
             size="small"
             endIcon={<OpenIcon fontSize="small" />}
-            onClick={() => window.open(project.url, '_blank')}
+            onClick={() => window.open(projectUrl, '_blank')}
           >
             Visit
           </Button>
         </Box>
 
-        <Box sx={{ display: 'flex', gap: 3, mt: 2 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <PeopleIcon fontSize="small" color="action" />
-            <Typography variant="body2" color="text.secondary">
-              {project.memberCount?.toLocaleString() ?? '?'} members
-            </Typography>
-          </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <ForumIcon fontSize="small" color="action" />
-            <Typography variant="body2" color="text.secondary">
-              {project.activeDiscussions} discussions
-            </Typography>
-          </Box>
+        <Box sx={{ display: 'flex', gap: 2, mt: 2 }}>
+          <Button
+            size="small"
+            variant="text"
+            startIcon={<ForumIcon fontSize="small" />}
+            onClick={() => window.open(`${projectUrl}/Talk`, '_blank')}
+          >
+            Talk
+          </Button>
+          <Button
+            size="small"
+            variant="text"
+            startIcon={<ArticleIcon fontSize="small" />}
+            onClick={() => window.open(`${projectUrl}/Assessment`, '_blank')}
+          >
+            Tasks
+          </Button>
         </Box>
       </CardContent>
     </Card>
@@ -201,21 +192,6 @@ function EditathonCard({ editathon }: EditathonCardProps) {
           )}
         </Box>
 
-        <Box sx={{ display: 'flex', gap: 3, mt: 1 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <PeopleIcon fontSize="small" color="action" />
-            <Typography variant="body2" color="text.secondary">
-              {editathon.participantCount} participants
-            </Typography>
-          </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <ArticleIcon fontSize="small" color="action" />
-            <Typography variant="body2" color="text.secondary">
-              {editathon.articleCount} articles
-            </Typography>
-          </Box>
-        </Box>
-
         <Button
           variant={isActive ? 'contained' : 'outlined'}
           size="small"
@@ -224,8 +200,68 @@ function EditathonCard({ editathon }: EditathonCardProps) {
           onClick={() => window.open(editathon.url, '_blank')}
           endIcon={<OpenIcon fontSize="small" />}
         >
-          {isActive ? 'Join Now' : isUpcoming ? 'Learn More' : 'View Results'}
+          {isActive ? 'Join Now' : isUpcoming ? 'Learn More' : 'View Event'}
         </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+// === Community Resources ===
+
+function CommunityResources() {
+  const resources = [
+    {
+      title: 'Teahouse',
+      description: 'Get help from experienced editors',
+      icon: <HelpIcon />,
+      url: 'https://en.wikipedia.org/wiki/Wikipedia:Teahouse',
+    },
+    {
+      title: 'Adopt-a-User',
+      description: 'Find a mentor or become one',
+      icon: <SchoolIcon />,
+      url: 'https://en.wikipedia.org/wiki/Wikipedia:Adopt-a-user',
+    },
+    {
+      title: 'Collaboration',
+      description: 'Join collaborative editing projects',
+      icon: <HandshakeIcon />,
+      url: 'https://en.wikipedia.org/wiki/Wikipedia:Collaboration',
+    },
+    {
+      title: 'Village Pump',
+      description: 'Central discussion forum',
+      icon: <ForumIcon />,
+      url: 'https://en.wikipedia.org/wiki/Wikipedia:Village_pump',
+    },
+  ];
+
+  return (
+    <Card>
+      <CardContent>
+        <Typography variant="h6" gutterBottom>
+          Community Resources
+        </Typography>
+        <Paper variant="outlined">
+          <List disablePadding>
+            {resources.map((resource, index) => (
+              <Box key={resource.title}>
+                {index > 0 && <Box sx={{ borderTop: 1, borderColor: 'divider' }} />}
+                <ListItem disablePadding>
+                  <ListItemButton onClick={() => window.open(resource.url, '_blank')}>
+                    <ListItemIcon>{resource.icon}</ListItemIcon>
+                    <ListItemText
+                      primary={resource.title}
+                      secondary={resource.description}
+                    />
+                    <OpenIcon fontSize="small" color="action" />
+                  </ListItemButton>
+                </ListItem>
+              </Box>
+            ))}
+          </List>
+        </Paper>
       </CardContent>
     </Card>
   );
@@ -234,13 +270,16 @@ function EditathonCard({ editathon }: EditathonCardProps) {
 // === Main Collaboration Panel ===
 
 export function CollaborationPanel() {
+  const { data: dashboard } = useDashboard();
+  const { data: wikiProjects, isLoading: projectsLoading, error: projectsError } = useWikiProjects();
+
   // Separate editathons by status
-  const { activeEditathons, upcomingEditathons, pastEditathons } = useMemo(() => {
+  const { activeEditathons, upcomingEditathons } = useMemo(() => {
     const active: Editathon[] = [];
     const upcoming: Editathon[] = [];
     const past: Editathon[] = [];
 
-    mockEditathons.forEach(e => {
+    featuredEditathons.forEach(e => {
       if (isFuture(e.startDate)) {
         upcoming.push(e);
       } else if (isFuture(e.endDate)) {
@@ -250,15 +289,28 @@ export function CollaborationPanel() {
       }
     });
 
-    return { activeEditathons: active, upcomingEditathons: upcoming, pastEditathons: past };
+    return { activeEditathons: active, upcomingEditathons: upcoming };
   }, []);
+
+  const projectCount = wikiProjects?.length ?? 0;
 
   return (
     <Box sx={{ p: 2 }}>
       <SectionHeader
         title="Collaboration"
-        subtitle="WikiProjects and community events"
+        subtitle="WikiProjects and community engagement"
       />
+
+      {/* Data source info */}
+      <Alert severity="info" sx={{ mb: 2 }}>
+        WikiProject memberships are detected from your user page and talk page participation.
+      </Alert>
+
+      {projectsError && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          Could not load WikiProject data. Check your user page for project userboxes.
+        </Alert>
+      )}
 
       {/* Stats */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
@@ -267,7 +319,7 @@ export function CollaborationPanel() {
             <CardContent sx={{ py: 1.5, textAlign: 'center' }}>
               <GroupsIcon color="primary" />
               <Typography variant="h5" fontWeight={600}>
-                {mockWikiProjects.length}
+                {projectsLoading ? <Skeleton width={30} sx={{ mx: 'auto' }} /> : projectCount}
               </Typography>
               <Typography variant="caption" color="text.secondary">
                 WikiProjects
@@ -291,19 +343,6 @@ export function CollaborationPanel() {
         <Grid item xs={6} sm={3}>
           <Card variant="outlined">
             <CardContent sx={{ py: 1.5, textAlign: 'center' }}>
-              <ForumIcon color="action" />
-              <Typography variant="h5" fontWeight={600}>
-                {mockWikiProjects.reduce((sum, p) => sum + p.activeDiscussions, 0)}
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                Discussions
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={6} sm={3}>
-          <Card variant="outlined">
-            <CardContent sx={{ py: 1.5, textAlign: 'center' }}>
               <TrendingIcon color="action" />
               <Typography variant="h5" fontWeight={600}>
                 {upcomingEditathons.length}
@@ -314,85 +353,116 @@ export function CollaborationPanel() {
             </CardContent>
           </Card>
         </Grid>
+        <Grid item xs={6} sm={3}>
+          <Card variant="outlined">
+            <CardContent sx={{ py: 1.5, textAlign: 'center' }}>
+              <PeopleIcon color="action" />
+              <Typography variant="h5" fontWeight={600}>
+                {dashboard?.stats.totalEdits.toLocaleString() ?? '-'}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Your Edits
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
       </Grid>
 
-      {/* Active and Upcoming Editathons */}
-      {(activeEditathons.length > 0 || upcomingEditathons.length > 0) && (
-        <Box sx={{ mb: 3 }}>
-          <Typography variant="h6" gutterBottom>
-            Editathons & Events
-          </Typography>
-          <Grid container spacing={2}>
-            {[...activeEditathons, ...upcomingEditathons].map(editathon => (
-              <Grid item xs={12} md={6} key={editathon.id}>
-                <EditathonCard editathon={editathon} />
-              </Grid>
-            ))}
-          </Grid>
-        </Box>
-      )}
-
-      {/* WikiProjects */}
+      {/* Your WikiProjects */}
       <Box sx={{ mb: 3 }}>
         <Typography variant="h6" gutterBottom>
           Your WikiProjects
         </Typography>
+        {projectsLoading ? (
+          <Grid container spacing={2}>
+            {[1, 2, 3].map(i => (
+              <Grid item xs={12} sm={6} md={4} key={i}>
+                <Skeleton variant="rounded" height={120} />
+              </Grid>
+            ))}
+          </Grid>
+        ) : projectCount > 0 ? (
+          <Grid container spacing={2}>
+            {wikiProjects?.map(project => (
+              <Grid item xs={12} sm={6} md={4} key={project}>
+                <WikiProjectCard projectName={project} />
+              </Grid>
+            ))}
+          </Grid>
+        ) : (
+          <Card variant="outlined">
+            <CardContent>
+              <Typography color="text.secondary" gutterBottom>
+                No WikiProject memberships detected.
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Join WikiProjects to collaborate with other editors on topics you're interested in.
+                Add project userboxes to your user page to be detected.
+              </Typography>
+              <Button
+                variant="outlined"
+                startIcon={<GroupsIcon />}
+                onClick={() => window.open('https://en.wikipedia.org/wiki/Wikipedia:WikiProject_Council/Directory', '_blank')}
+              >
+                Browse WikiProjects
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+      </Box>
+
+      {/* Featured Editathons */}
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="h6" gutterBottom>
+          Featured Events
+        </Typography>
         <Grid container spacing={2}>
-          {mockWikiProjects.map(project => (
-            <Grid item xs={12} sm={6} md={4} key={project.shortname}>
-              <WikiProjectCard project={project} />
+          {[...activeEditathons, ...upcomingEditathons].slice(0, 3).map(editathon => (
+            <Grid item xs={12} md={4} key={editathon.id}>
+              <EditathonCard editathon={editathon} />
             </Grid>
           ))}
         </Grid>
       </Box>
 
-      {/* Past Editathons */}
-      {pastEditathons.length > 0 && (
-        <Box>
-          <Typography variant="h6" gutterBottom>
-            Past Events
-          </Typography>
-          <Grid container spacing={2}>
-            {pastEditathons.map(editathon => (
-              <Grid item xs={12} md={6} key={editathon.id}>
-                <EditathonCard editathon={editathon} />
-              </Grid>
-            ))}
-          </Grid>
-        </Box>
-      )}
-
-      {/* Discover more */}
-      <Card variant="outlined" sx={{ mt: 3 }}>
-        <CardContent>
-          <Typography variant="subtitle1" gutterBottom>
-            Discover More
-          </Typography>
-          <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-            <Button
-              variant="outlined"
-              startIcon={<GroupsIcon />}
-              onClick={() => window.open('https://en.wikipedia.org/wiki/Wikipedia:WikiProject_Council/Directory', '_blank')}
-            >
-              Browse WikiProjects
-            </Button>
-            <Button
-              variant="outlined"
-              startIcon={<EventIcon />}
-              onClick={() => window.open('https://en.wikipedia.org/wiki/Wikipedia:Meetup', '_blank')}
-            >
-              Find Meetups
-            </Button>
-            <Button
-              variant="outlined"
-              startIcon={<ForumIcon />}
-              onClick={() => window.open('https://en.wikipedia.org/wiki/Wikipedia:Village_pump', '_blank')}
-            >
-              Village Pump
-            </Button>
-          </Box>
-        </CardContent>
-      </Card>
+      {/* Community Resources */}
+      <Grid container spacing={2}>
+        <Grid item xs={12} md={6}>
+          <CommunityResources />
+        </Grid>
+        <Grid item xs={12} md={6}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Find More
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                <Button
+                  variant="outlined"
+                  startIcon={<GroupsIcon />}
+                  onClick={() => window.open('https://en.wikipedia.org/wiki/Wikipedia:WikiProject_Council/Directory', '_blank')}
+                >
+                  All WikiProjects
+                </Button>
+                <Button
+                  variant="outlined"
+                  startIcon={<EventIcon />}
+                  onClick={() => window.open('https://en.wikipedia.org/wiki/Wikipedia:Meetup', '_blank')}
+                >
+                  Meetups
+                </Button>
+                <Button
+                  variant="outlined"
+                  startIcon={<CalendarIcon />}
+                  onClick={() => window.open('https://en.wikipedia.org/wiki/Wikipedia:Editathon', '_blank')}
+                >
+                  Editathons
+                </Button>
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
     </Box>
   );
 }

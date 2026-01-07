@@ -1,6 +1,7 @@
 /**
  * Quality Tracker Panel Component
  * Track article quality nominations and assessments
+ * Connected to real Wikipedia API for page assessments
  */
 
 import { useMemo } from 'react';
@@ -18,6 +19,9 @@ import {
   ListItemText,
   Paper,
   Typography,
+  Skeleton,
+  Alert,
+  Button,
 } from '@mui/material';
 import {
   Star as StarIcon,
@@ -25,13 +29,12 @@ import {
   EmojiEvents as TrophyIcon,
   Pending as PendingIcon,
   CheckCircle as PassedIcon,
-  Cancel as FailedIcon,
   TrendingUp as TrendingIcon,
+  OpenInNew as OpenIcon,
 } from '@mui/icons-material';
-import { format } from 'date-fns';
 import { SectionHeader, EmptyState } from '../common';
-import { useDashboard } from '@presentation/hooks/queries';
-import type { QualityAssessment, QualityNomination, ArticleClass } from '@domain/entities';
+import { useArticlesCreated, usePageAssessments } from '@presentation/hooks/queries';
+import type { ArticleClass } from '@domain/entities';
 
 // === Article class config ===
 const CLASS_CONFIG: Record<ArticleClass, { label: string; color: string; icon: React.ReactNode }> = {
@@ -47,99 +50,21 @@ const CLASS_CONFIG: Record<ArticleClass, { label: string; color: string; icon: R
   Unassessed: { label: 'Unassessed', color: '#AAAAAA', icon: <StarBorderIcon sx={{ color: '#AAAAAA' }} /> },
 };
 
-// === Mock data ===
-const mockNominations: QualityNomination[] = [
-  {
-    id: '1',
-    title: 'Machine learning',
-    type: 'GA',
-    status: 'under-review',
-    nominatedAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
-    resolvedAt: null,
-    url: 'https://en.wikipedia.org/wiki/Talk:Machine_learning/GA1',
-  },
-  {
-    id: '2',
-    title: 'Artificial neural network',
-    type: 'peer-review',
-    status: 'pending',
-    nominatedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
-    resolvedAt: null,
-    url: 'https://en.wikipedia.org/wiki/Wikipedia:Peer_review/Artificial_neural_network',
-  },
-  {
-    id: '3',
-    title: 'Deep learning',
-    type: 'DYK',
-    status: 'passed',
-    nominatedAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
-    resolvedAt: new Date(Date.now() - 25 * 24 * 60 * 60 * 1000),
-    url: 'https://en.wikipedia.org/wiki/Template:Did_you_know_nominations/Deep_learning',
-  },
-  {
-    id: '4',
-    title: 'Computer vision',
-    type: 'GA',
-    status: 'failed',
-    nominatedAt: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000),
-    resolvedAt: new Date(Date.now() - 45 * 24 * 60 * 60 * 1000),
-    url: 'https://en.wikipedia.org/wiki/Talk:Computer_vision/GA1',
-  },
-];
-
-const mockAssessments: QualityAssessment[] = [
-  { title: 'Machine learning', class: 'B', importance: 'top', projects: ['Computing', 'AI'], assessedAt: new Date() },
-  { title: 'Neural network', class: 'C', importance: 'high', projects: ['Computing'], assessedAt: new Date() },
-  { title: 'Deep learning', class: 'GA', importance: 'high', projects: ['Computing', 'AI'], assessedAt: new Date() },
-  { title: 'Computer vision', class: 'B', importance: 'mid', projects: ['Computing'], assessedAt: new Date() },
-  { title: 'Convolutional neural network', class: 'start', importance: 'mid', projects: ['Computing'], assessedAt: new Date() },
-];
-
-// === Nomination Status Icon ===
-function NominationStatusIcon({ status }: { status: QualityNomination['status'] }) {
-  switch (status) {
-    case 'passed':
-      return <PassedIcon color="success" />;
-    case 'failed':
-      return <FailedIcon color="error" />;
-    case 'under-review':
-      return <PendingIcon color="info" />;
-    default:
-      return <PendingIcon color="action" />;
-  }
-}
-
-// === Nomination Type Chip ===
-function NominationTypeChip({ type }: { type: QualityNomination['type'] }) {
-  const config: Record<string, { label: string; color: string }> = {
-    GA: { label: 'Good Article', color: '#66FF66' },
-    FA: { label: 'Featured Article', color: '#FFD700' },
-    FL: { label: 'Featured List', color: '#FFD700' },
-    DYK: { label: 'Did You Know', color: '#9c27b0' },
-    ITN: { label: 'In The News', color: '#1976d2' },
-    'peer-review': { label: 'Peer Review', color: '#757575' },
-  };
-
-  const c = config[type] ?? { label: type, color: '#757575' };
-  return (
-    <Chip
-      label={c.label}
-      size="small"
-      sx={{
-        height: 20,
-        fontSize: '0.65rem',
-        bgcolor: `${c.color}20`,
-        color: c.color,
-        borderColor: c.color,
-      }}
-      variant="outlined"
-    />
-  );
+// === Quality Assessment from API ===
+interface AssessmentData {
+  title: string;
+  class: ArticleClass;
+  projects: string[];
 }
 
 // === Quality Distribution Chart ===
 
-function QualityDistribution({ assessments }: { assessments: QualityAssessment[] }) {
+interface QualityDistributionProps {
+  assessments: AssessmentData[];
+  loading?: boolean;
+}
+
+function QualityDistribution({ assessments, loading }: QualityDistributionProps) {
   const distribution = useMemo(() => {
     const counts: Record<string, number> = {};
     assessments.forEach(a => {
@@ -157,6 +82,39 @@ function QualityDistribution({ assessments }: { assessments: QualityAssessment[]
   }, [assessments]);
 
   const total = assessments.length;
+
+  if (loading) {
+    return (
+      <Card>
+        <CardContent>
+          <Typography variant="h6" gutterBottom>
+            Article Quality Distribution
+          </Typography>
+          {[1, 2, 3, 4].map(i => (
+            <Box key={i} sx={{ mb: 2 }}>
+              <Skeleton variant="text" width="40%" />
+              <Skeleton variant="rectangular" height={8} sx={{ borderRadius: 4 }} />
+            </Box>
+          ))}
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (distribution.length === 0) {
+    return (
+      <Card>
+        <CardContent>
+          <Typography variant="h6" gutterBottom>
+            Article Quality Distribution
+          </Typography>
+          <Typography color="text.secondary">
+            No assessed articles found. Create mainspace articles to see quality assessments.
+          </Typography>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card>
@@ -197,116 +155,172 @@ function QualityDistribution({ assessments }: { assessments: QualityAssessment[]
   );
 }
 
-// === Nomination List ===
+// === Article List by Quality ===
 
-function NominationList({ nominations }: { nominations: QualityNomination[] }) {
-  const activeNominations = nominations.filter(n => n.status === 'pending' || n.status === 'under-review');
-  const resolvedNominations = nominations.filter(n => n.status === 'passed' || n.status === 'failed');
+interface ArticleListProps {
+  assessments: AssessmentData[];
+  loading?: boolean;
+}
+
+function ArticleList({ assessments, loading }: ArticleListProps) {
+  // Sort by quality class
+  const sortedArticles = useMemo(() => {
+    const classOrder: ArticleClass[] = ['FA', 'FL', 'A', 'GA', 'B', 'C', 'start', 'stub', 'List', 'Unassessed'];
+    return [...assessments].sort((a, b) => {
+      return classOrder.indexOf(a.class) - classOrder.indexOf(b.class);
+    });
+  }, [assessments]);
+
+  if (loading) {
+    return (
+      <Card>
+        <CardContent>
+          <Typography variant="h6" gutterBottom>
+            Your Assessed Articles
+          </Typography>
+          {[1, 2, 3, 4, 5].map(i => (
+            <Skeleton key={i} variant="rectangular" height={48} sx={{ mb: 1 }} />
+          ))}
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (sortedArticles.length === 0) {
+    return (
+      <Card>
+        <CardContent>
+          <Typography variant="h6" gutterBottom>
+            Your Assessed Articles
+          </Typography>
+          <EmptyState
+            title="No assessed articles"
+            description="Create mainspace articles to see quality assessments here"
+            icon={<TrophyIcon sx={{ fontSize: 48 }} />}
+          />
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card>
       <CardContent>
         <Typography variant="h6" gutterBottom>
+          Your Assessed Articles ({sortedArticles.length})
+        </Typography>
+        <Paper variant="outlined">
+          <List disablePadding sx={{ maxHeight: 400, overflow: 'auto' }}>
+            {sortedArticles.map((article, index) => {
+              const config = CLASS_CONFIG[article.class];
+              return (
+                <Box key={article.title}>
+                  {index > 0 && <Box sx={{ borderTop: 1, borderColor: 'divider' }} />}
+                  <ListItem disablePadding>
+                    <ListItemButton
+                      onClick={() =>
+                        window.open(
+                          `https://en.wikipedia.org/wiki/${encodeURIComponent(article.title)}`,
+                          '_blank'
+                        )
+                      }
+                    >
+                      <ListItemIcon>{config.icon}</ListItemIcon>
+                      <ListItemText
+                        primary={
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Typography variant="body2" fontWeight={500}>
+                              {article.title}
+                            </Typography>
+                            <Chip
+                              label={config.label}
+                              size="small"
+                              sx={{
+                                height: 18,
+                                fontSize: '0.65rem',
+                                bgcolor: `${config.color}20`,
+                                color: config.color,
+                              }}
+                            />
+                          </Box>
+                        }
+                        secondary={
+                          article.projects.length > 0
+                            ? `WikiProjects: ${article.projects.join(', ')}`
+                            : 'No WikiProject assessment'
+                        }
+                      />
+                    </ListItemButton>
+                  </ListItem>
+                </Box>
+              );
+            })}
+          </List>
+        </Paper>
+      </CardContent>
+    </Card>
+  );
+}
+
+// === Nomination Info Card ===
+
+function NominationInfo() {
+  return (
+    <Card variant="outlined">
+      <CardContent>
+        <Typography variant="h6" gutterBottom>
           Quality Nominations
         </Typography>
-
-        {activeNominations.length > 0 && (
-          <Box sx={{ mb: 2 }}>
-            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-              Active
-            </Typography>
-            <Paper variant="outlined">
-              <List disablePadding>
-                {activeNominations.map((nomination, index) => (
-                  <Box key={nomination.id}>
-                    {index > 0 && <Box sx={{ borderTop: 1, borderColor: 'divider' }} />}
-                    <ListItem
-                      disablePadding
-                      secondaryAction={
-                        <Chip
-                          label={nomination.status === 'under-review' ? 'Under Review' : 'Pending'}
-                          size="small"
-                          color={nomination.status === 'under-review' ? 'info' : 'default'}
-                        />
-                      }
-                    >
-                      <ListItemButton onClick={() => window.open(nomination.url, '_blank')}>
-                        <ListItemIcon>
-                          <NominationStatusIcon status={nomination.status} />
-                        </ListItemIcon>
-                        <ListItemText
-                          primary={
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              <Typography variant="body2" fontWeight={500}>
-                                {nomination.title}
-                              </Typography>
-                              <NominationTypeChip type={nomination.type} />
-                            </Box>
-                          }
-                          secondary={`Nominated ${format(nomination.nominatedAt, 'MMM d, yyyy')}`}
-                        />
-                      </ListItemButton>
-                    </ListItem>
-                  </Box>
-                ))}
-              </List>
-            </Paper>
-          </Box>
-        )}
-
-        {resolvedNominations.length > 0 && (
-          <Box>
-            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-              Recent History
-            </Typography>
-            <Paper variant="outlined">
-              <List disablePadding>
-                {resolvedNominations.map((nomination, index) => (
-                  <Box key={nomination.id}>
-                    {index > 0 && <Box sx={{ borderTop: 1, borderColor: 'divider' }} />}
-                    <ListItem
-                      disablePadding
-                      secondaryAction={
-                        <Chip
-                          label={nomination.status === 'passed' ? 'Passed' : 'Failed'}
-                          size="small"
-                          color={nomination.status === 'passed' ? 'success' : 'error'}
-                        />
-                      }
-                    >
-                      <ListItemButton onClick={() => window.open(nomination.url, '_blank')}>
-                        <ListItemIcon>
-                          <NominationStatusIcon status={nomination.status} />
-                        </ListItemIcon>
-                        <ListItemText
-                          primary={
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              <Typography variant="body2">{nomination.title}</Typography>
-                              <NominationTypeChip type={nomination.type} />
-                            </Box>
-                          }
-                          secondary={
-                            nomination.resolvedAt
-                              ? `Resolved ${format(nomination.resolvedAt, 'MMM d, yyyy')}`
-                              : `Nominated ${format(nomination.nominatedAt, 'MMM d, yyyy')}`
-                          }
-                        />
-                      </ListItemButton>
-                    </ListItem>
-                  </Box>
-                ))}
-              </List>
-            </Paper>
-          </Box>
-        )}
-
-        {nominations.length === 0 && (
-          <EmptyState
-            title="No nominations"
-            description="Start a GA or FA nomination to track progress here"
-            icon={<TrophyIcon sx={{ fontSize: 48 }} />}
-          />
-        )}
+        <Alert severity="info" sx={{ mb: 2 }}>
+          Nomination tracking requires OAuth authentication for full access.
+          Visit these pages to check your active nominations manually.
+        </Alert>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<StarIcon sx={{ color: '#66FF66' }} />}
+            endIcon={<OpenIcon fontSize="small" />}
+            onClick={() =>
+              window.open('https://en.wikipedia.org/wiki/Wikipedia:Good_article_nominations', '_blank')
+            }
+          >
+            Good Article Nominations
+          </Button>
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<StarIcon sx={{ color: '#FFD700' }} />}
+            endIcon={<OpenIcon fontSize="small" />}
+            onClick={() =>
+              window.open('https://en.wikipedia.org/wiki/Wikipedia:Featured_article_candidates', '_blank')
+            }
+          >
+            Featured Article Candidates
+          </Button>
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<TrophyIcon color="secondary" />}
+            endIcon={<OpenIcon fontSize="small" />}
+            onClick={() =>
+              window.open('https://en.wikipedia.org/wiki/Wikipedia:Did_you_know', '_blank')
+            }
+          >
+            Did You Know
+          </Button>
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<PendingIcon color="action" />}
+            endIcon={<OpenIcon fontSize="small" />}
+            onClick={() =>
+              window.open('https://en.wikipedia.org/wiki/Wikipedia:Peer_review', '_blank')
+            }
+          >
+            Peer Review
+          </Button>
+        </Box>
       </CardContent>
     </Card>
   );
@@ -315,20 +329,71 @@ function NominationList({ nominations }: { nominations: QualityNomination[] }) {
 // === Main Quality Tracker Panel ===
 
 export function QualityTrackerPanel() {
-  useDashboard(); // Preload dashboard data
+  // Fetch user's created articles
+  const { data: articlesCreated, isLoading: articlesLoading } = useArticlesCreated();
 
-  const activeNominations = mockNominations.filter(
-    n => n.status === 'pending' || n.status === 'under-review'
-  ).length;
-  const passedNominations = mockNominations.filter(n => n.status === 'passed').length;
-  const gaArticles = mockAssessments.filter(a => a.class === 'GA' || a.class === 'FA').length;
+  // Get article titles for assessment lookup
+  const articleTitles = useMemo(() => {
+    return articlesCreated?.map(a => a.title) ?? [];
+  }, [articlesCreated]);
+
+  // Fetch page assessments for created articles
+  const { data: assessmentsData, isLoading: assessmentsLoading, error: assessmentsError } = usePageAssessments(articleTitles);
+
+  // Transform assessment data
+  const assessments: AssessmentData[] = useMemo(() => {
+    if (!assessmentsData || !articlesCreated) return [];
+
+    return articlesCreated.map(article => {
+      const assessment = assessmentsData[article.title];
+      if (assessment) {
+        // Get the highest quality class from all projects
+        const classes = Object.values(assessment).map(p => p.class);
+        const classOrder: ArticleClass[] = ['FA', 'FL', 'A', 'GA', 'B', 'C', 'start', 'stub', 'List', 'Unassessed'];
+        const bestClass = classes.reduce((best, current) => {
+          const bestIdx = classOrder.indexOf(best as ArticleClass);
+          const currentIdx = classOrder.indexOf(current as ArticleClass);
+          return currentIdx < bestIdx ? current : best;
+        }, 'Unassessed') as ArticleClass;
+
+        return {
+          title: article.title,
+          class: bestClass,
+          projects: Object.keys(assessment),
+        };
+      }
+      return {
+        title: article.title,
+        class: 'Unassessed' as ArticleClass,
+        projects: [],
+      };
+    });
+  }, [articlesCreated, assessmentsData]);
+
+  const isLoading = articlesLoading || assessmentsLoading;
+
+  // Calculate stats
+  const gaFaArticles = assessments.filter(a => a.class === 'GA' || a.class === 'FA' || a.class === 'FL').length;
+  const bClassOrBetter = assessments.filter(a => ['FA', 'FL', 'A', 'GA', 'B'].includes(a.class)).length;
+  const assessedCount = assessments.filter(a => a.class !== 'Unassessed').length;
 
   return (
     <Box sx={{ p: 2 }}>
       <SectionHeader
         title="Quality Tracker"
-        subtitle="Track article quality and nominations"
+        subtitle="Track article quality and assessments"
       />
+
+      {/* Data source info */}
+      <Alert severity="info" sx={{ mb: 2 }}>
+        Quality assessments are fetched live from Wikipedia for your created articles.
+      </Alert>
+
+      {assessmentsError && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          Some assessment data couldn't be loaded. Showing available data.
+        </Alert>
+      )}
 
       {/* Stats */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
@@ -337,10 +402,10 @@ export function QualityTrackerPanel() {
             <CardContent sx={{ py: 1.5, textAlign: 'center' }}>
               <TrendingIcon color="primary" />
               <Typography variant="h5" fontWeight={600}>
-                {activeNominations}
+                {isLoading ? <Skeleton width={30} sx={{ mx: 'auto' }} /> : articleTitles.length}
               </Typography>
               <Typography variant="caption" color="text.secondary">
-                Active Nominations
+                Articles Created
               </Typography>
             </CardContent>
           </Card>
@@ -350,10 +415,10 @@ export function QualityTrackerPanel() {
             <CardContent sx={{ py: 1.5, textAlign: 'center' }}>
               <PassedIcon color="success" />
               <Typography variant="h5" fontWeight={600} color="success.main">
-                {passedNominations}
+                {isLoading ? <Skeleton width={30} sx={{ mx: 'auto' }} /> : assessedCount}
               </Typography>
               <Typography variant="caption" color="text.secondary">
-                Passed
+                Assessed
               </Typography>
             </CardContent>
           </Card>
@@ -363,7 +428,7 @@ export function QualityTrackerPanel() {
             <CardContent sx={{ py: 1.5, textAlign: 'center' }}>
               <StarIcon sx={{ color: '#66FF66' }} />
               <Typography variant="h5" fontWeight={600}>
-                {gaArticles}
+                {isLoading ? <Skeleton width={30} sx={{ mx: 'auto' }} /> : gaFaArticles}
               </Typography>
               <Typography variant="caption" color="text.secondary">
                 GA/FA Articles
@@ -374,12 +439,12 @@ export function QualityTrackerPanel() {
         <Grid item xs={6} sm={3}>
           <Card variant="outlined">
             <CardContent sx={{ py: 1.5, textAlign: 'center' }}>
-              <StarBorderIcon color="action" />
+              <StarBorderIcon sx={{ color: '#B2FF66' }} />
               <Typography variant="h5" fontWeight={600}>
-                {mockAssessments.length}
+                {isLoading ? <Skeleton width={30} sx={{ mx: 'auto' }} /> : bClassOrBetter}
               </Typography>
               <Typography variant="caption" color="text.secondary">
-                Assessed
+                B-class or better
               </Typography>
             </CardContent>
           </Card>
@@ -388,10 +453,13 @@ export function QualityTrackerPanel() {
 
       <Grid container spacing={2}>
         <Grid item xs={12} md={6}>
-          <QualityDistribution assessments={mockAssessments} />
+          <QualityDistribution assessments={assessments} loading={isLoading} />
         </Grid>
         <Grid item xs={12} md={6}>
-          <NominationList nominations={mockNominations} />
+          <NominationInfo />
+        </Grid>
+        <Grid item xs={12}>
+          <ArticleList assessments={assessments} loading={isLoading} />
         </Grid>
       </Grid>
     </Box>

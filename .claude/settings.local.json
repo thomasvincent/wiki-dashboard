@@ -15,7 +15,9 @@
       "Bash(npm ls:*)",
       "Bash(npm run lint)",
       "Bash(npm run typecheck:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Bash(gh run watch:*)",
+      "WebFetch(domain:thomasvincent.github.io)"
     ]
   },
   "enableAllProjectMcpServers": true,
