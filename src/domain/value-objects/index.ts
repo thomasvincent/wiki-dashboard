@@ -3,7 +3,7 @@
  * Encapsulates formatting and validation rules
  */
 
-import type { DraftStatus, ContributionType, TaskPriority, TaskStatus, FocusAreaStatus } from './index';
+import type { DraftStatus, ContributionType, TaskPriority, TaskStatus, FocusAreaStatus } from '@domain/entities';
 
 // === Status Display Mappings ===
 
