@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  # Development server
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+    command: npm run dev
+
+  # Production build
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+  # E2E testing
+  e2e:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    depends_on:
+      - app
+    environment:
+      - BASE_URL=http://app:80
+    command: npm run test:e2e
+
+  # Unit testing
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    volumes:
+      - .:/app
+      - /app/node_modules
+    command: npm run test
