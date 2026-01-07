@@ -3,7 +3,7 @@
  * Task management with CRUD operations, filtering, and prioritization
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import {
   Box,
   Button,
@@ -412,7 +412,7 @@ export function TasksPanel() {
         <Paper variant="outlined">
           <List disablePadding>
             {sortedTasks.map((task, index) => (
-              <React.Fragment key={task.id}>
+              <Fragment key={task.id}>
                 {index > 0 && <Box sx={{ borderTop: 1, borderColor: 'divider' }} />}
                 <TaskListItem
                   task={task}
@@ -420,7 +420,7 @@ export function TasksPanel() {
                   onEdit={handleEdit}
                   onDelete={deleteTask}
                 />
-              </React.Fragment>
+              </Fragment>
             ))}
           </List>
         </Paper>
