@@ -3,7 +3,7 @@
  * Displays all drafts with filtering and drill-down
  */
 
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import {
   Box,
   Card,
@@ -33,7 +33,6 @@ import {
   OpenInNew as OpenInNewIcon,
   Forum as ForumIcon,
   History as HistoryIcon,
-  FilterList as FilterIcon,
 } from '@mui/icons-material';
 import { format } from 'date-fns';
 import { StatusChip, SectionHeader, WikiLink, EmptyState } from '../common';
@@ -266,11 +265,12 @@ export function DraftsPanel() {
         case 'lastEditedAt':
           comparison = a.lastEditedAt.getTime() - b.lastEditedAt.getTime();
           break;
-        case 'submittedAt':
+        case 'submittedAt': {
           const aTime = a.submittedAt?.getTime() ?? 0;
           const bTime = b.submittedAt?.getTime() ?? 0;
           comparison = aTime - bTime;
           break;
+        }
       }
       return sortDirection === 'asc' ? comparison : -comparison;
     });

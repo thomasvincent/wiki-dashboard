@@ -3,7 +3,7 @@
  * Displays project clusters with article progress tracking
  */
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
   Box,
   Card,
@@ -19,7 +19,6 @@ import {
   ListItem,
   ListItemIcon,
   ListItemText,
-  Paper,
   Tooltip,
   Typography,
 } from '@mui/material';
@@ -28,10 +27,9 @@ import {
   ExpandLess as ExpandLessIcon,
   Article as ArticleIcon,
   OpenInNew as OpenInNewIcon,
-  Edit as EditIcon,
 } from '@mui/icons-material';
 import { format } from 'date-fns';
-import { StatusChip, SectionHeader, WikiLink, EmptyState, ProgressCard } from '../common';
+import { SectionHeader, EmptyState } from '../common';
 import { useDashboard } from '@presentation/hooks/queries';
 import { calculateFocusAreaProgress } from '@application/services';
 import { FOCUS_AREA_STATUS_DISPLAY } from '@domain/value-objects';

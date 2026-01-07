@@ -4,21 +4,18 @@
  * Compact design for laptop screens
  */
 
-import React from 'react';
 import {
   Box,
   Grid,
   Card,
   CardContent,
   CardHeader,
-  CardActionArea,
   Typography,
   List,
   ListItem,
   ListItemText,
   ListItemIcon,
   Divider,
-  Avatar,
 } from '@mui/material';
 import {
   Article as ArticleIcon,
@@ -26,10 +23,9 @@ import {
   Task as TaskIcon,
   Folder as FolderIcon,
   Warning as WarningIcon,
-  TrendingUp as TrendingUpIcon,
 } from '@mui/icons-material';
 import { StatsCard, ProgressCard, StatusChip, WikiLink, SectionHeader } from '../common';
-import { useUIStore, useDashboardStore } from '@presentation/hooks';
+import { useUIStore } from '@presentation/hooks';
 import { useDashboard, useRefreshDashboard, useTimeSinceUpdate } from '@presentation/hooks/queries';
 import { analyzeDrafts, analyzeContributions, calculateFocusAreaProgress } from '@application/services';
 import { formatEditCount, getXToolsUrl, getContributionsUrl } from '@domain/value-objects';
@@ -44,7 +40,8 @@ interface QuickStatsProps {
 
 function QuickStats({ dashboard, onNavigate }: QuickStatsProps) {
   const draftSummary = analyzeDrafts(dashboard.drafts);
-  const contribSummary = analyzeContributions(dashboard.recentContributions);
+  // Analyze contributions for potential future use
+  analyzeContributions(dashboard.recentContributions);
   const pendingTasks = dashboard.tasks.filter((t) => t.status !== 'completed').length;
   const highPriorityTasks = dashboard.tasks.filter((t) => t.priority === 'high' && t.status !== 'completed').length;
 

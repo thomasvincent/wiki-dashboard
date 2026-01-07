@@ -3,13 +3,12 @@
  * Task management with CRUD operations, filtering, and prioritization
  */
 
-import React, { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box,
   Button,
   Card,
   CardContent,
-  Checkbox,
   Chip,
   Dialog,
   DialogActions,
@@ -45,6 +44,7 @@ import {
 import { format } from 'date-fns';
 import { StatusChip, SectionHeader, EmptyState } from '../common';
 import { useTaskStore, selectFilteredTasks, selectTaskStats } from '@presentation/hooks';
+import { useDashboard } from '@presentation/hooks/queries';
 import { sortTasksByPriority } from '@application/services';
 import { TASK_PRIORITY_DISPLAY } from '@domain/value-objects';
 import type { Task, TaskPriority, TaskStatus } from '@domain/entities';
@@ -309,8 +309,8 @@ export function TasksPanel() {
   const [editingTask, setEditingTask] = useState<Task | undefined>();
 
   // Initialize from dashboard if empty
-  const { data: dashboard } = require('@presentation/hooks/queries').useDashboard();
-  React.useEffect(() => {
+  const { data: dashboard } = useDashboard();
+  useEffect(() => {
     if (tasks.length === 0 && dashboard?.tasks) {
       setTasks([...dashboard.tasks]);
     }

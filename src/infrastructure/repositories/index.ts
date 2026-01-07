@@ -18,7 +18,6 @@ import type {
 } from '@domain/entities';
 import type {
   IUserRepository,
-  IDraftRepository,
   IContributionRepository,
   IStatsRepository,
   IDashboardRepository,

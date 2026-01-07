@@ -4,7 +4,7 @@
  * Optimized for laptop screens
  */
 
-import React, { useMemo } from 'react';
+// React hooks imported at component level
 import {
   Box,
   Drawer,
@@ -36,7 +36,7 @@ import {
   LightMode as LightModeIcon,
   OpenInNew as OpenInNewIcon,
 } from '@mui/icons-material';
-import { useUIStore, useDashboardStore } from '@presentation/hooks';
+import { useUIStore } from '@presentation/hooks';
 import { useDashboard } from '@presentation/hooks/queries';
 import { DashboardOverview } from '../dashboard/Overview';
 import { DraftsPanel } from '../drafts/DraftsPanel';
@@ -233,7 +233,7 @@ export function AppLayout() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const { sidebarOpen, toggleSidebar, setSidebarOpen } = useUIStore();
-  const { data: dashboard } = useDashboard();
+  useDashboard(); // Prefetch dashboard data
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
