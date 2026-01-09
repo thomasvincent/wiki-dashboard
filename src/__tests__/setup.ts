@@ -1,16 +1,20 @@
 /**
  * Test Setup
- * Configures testing environment
+ * Configures testing environment with MSW
  */
 
 import '@testing-library/jest-dom';
-import { afterEach } from 'vitest';
+import { afterAll, afterEach, beforeAll } from 'vitest';
 import { cleanup } from '@testing-library/react';
+import { server } from './mocks/server';
 
-// Cleanup after each test
+// Setup MSW server
+beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 afterEach(() => {
   cleanup();
+  server.resetHandlers();
 });
+afterAll(() => server.close());
 
 // Mock window.matchMedia
 Object.defineProperty(window, 'matchMedia', {

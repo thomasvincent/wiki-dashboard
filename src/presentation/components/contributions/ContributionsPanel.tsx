@@ -3,7 +3,7 @@
  * Displays contribution history with filtering and drill-down
  */
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, memo } from 'react';
 import {
   Box,
   Card,
@@ -65,26 +65,35 @@ interface ContributionRowProps {
   onSelect: (contribution: Contribution) => void;
 }
 
-function ContributionRow({ contribution, onSelect }: ContributionRowProps) {
+const ContributionRow = memo(function ContributionRow({
+  contribution,
+  onSelect,
+}: ContributionRowProps) {
   const typeDisplay = CONTRIBUTION_TYPE_DISPLAY[contribution.type];
   const isPositive = contribution.byteDiff >= 0;
 
   return (
-    <TableRow
-      hover
-      sx={{ cursor: 'pointer' }}
-      onClick={() => onSelect(contribution)}
-    >
+    <TableRow hover sx={{ cursor: 'pointer' }} onClick={() => onSelect(contribution)}>
       <TableCell>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <Typography variant="body2" fontWeight={500}>
             {contribution.articleTitle}
           </Typography>
           {contribution.isMinor && (
-            <Chip label="m" size="small" variant="outlined" sx={{ height: 16, fontSize: '0.6rem' }} />
+            <Chip
+              label="m"
+              size="small"
+              variant="outlined"
+              sx={{ height: 16, fontSize: '0.6rem' }}
+            />
           )}
         </Box>
-        <Typography variant="caption" color="text.secondary" noWrap sx={{ maxWidth: 300, display: 'block' }}>
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          noWrap
+          sx={{ maxWidth: 300, display: 'block' }}
+        >
           {contribution.summary || 'No edit summary'}
         </Typography>
       </TableCell>
@@ -115,9 +124,7 @@ function ContributionRow({ contribution, onSelect }: ContributionRowProps) {
         </Box>
       </TableCell>
       <TableCell>
-        <Typography variant="body2">
-          {format(contribution.timestamp, 'MMM d, yyyy')}
-        </Typography>
+        <Typography variant="body2">{format(contribution.timestamp, 'MMM d, yyyy')}</Typography>
         <Typography variant="caption" color="text.secondary">
           {format(contribution.timestamp, 'h:mm a')}
         </Typography>
@@ -126,6 +133,7 @@ function ContributionRow({ contribution, onSelect }: ContributionRowProps) {
         <Tooltip title="View diff">
           <IconButton
             size="small"
+            aria-label={`View diff for ${contribution.articleTitle}`}
             onClick={(e) => {
               e.stopPropagation();
               window.open(
@@ -140,6 +148,7 @@ function ContributionRow({ contribution, onSelect }: ContributionRowProps) {
         <Tooltip title="Open article">
           <IconButton
             size="small"
+            aria-label={`Open article: ${contribution.articleTitle}`}
             onClick={(e) => {
               e.stopPropagation();
               window.open(contribution.articleUrl, '_blank');
@@ -151,7 +160,7 @@ function ContributionRow({ contribution, onSelect }: ContributionRowProps) {
       </TableCell>
     </TableRow>
   );
-}
+});
 
 // === Timeline View ===
 
@@ -163,7 +172,7 @@ function TimelineView({ contributions }: TimelineViewProps) {
   // Group by date
   const grouped = useMemo(() => {
     const groups = new Map<string, Contribution[]>();
-    
+
     for (const c of contributions) {
       let label: string;
       if (isToday(c.timestamp)) {
@@ -175,11 +184,11 @@ function TimelineView({ contributions }: TimelineViewProps) {
       } else {
         label = format(c.timestamp, 'MMMM d, yyyy');
       }
-      
+
       const existing = groups.get(label) ?? [];
       groups.set(label, [...existing, c]);
     }
-    
+
     return groups;
   }, [contributions]);
 
@@ -193,7 +202,9 @@ function TimelineView({ contributions }: TimelineViewProps) {
           {contribs.map((c) => (
             <Card key={c.revisionId} sx={{ mb: 1 }}>
               <CardContent sx={{ py: 1, '&:last-child': { pb: 1 } }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Box
+                  sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                >
                   <Box>
                     <WikiLink href={c.articleUrl}>{c.articleTitle}</WikiLink>
                     <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
@@ -233,8 +244,12 @@ function StatsSummary({ contributions }: StatsSummaryProps) {
       <Grid item xs={6} sm={3}>
         <Card variant="outlined">
           <CardContent sx={{ py: 1, textAlign: 'center' }}>
-            <Typography variant="h5" fontWeight={600}>{summary.totalEdits}</Typography>
-            <Typography variant="caption" color="text.secondary">Total Edits</Typography>
+            <Typography variant="h5" fontWeight={600}>
+              {summary.totalEdits}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              Total Edits
+            </Typography>
           </CardContent>
         </Card>
       </Grid>
@@ -244,23 +259,33 @@ function StatsSummary({ contributions }: StatsSummaryProps) {
             <Typography variant="h5" fontWeight={600} color="success.main">
               +{(summary.totalBytesAdded / 1000).toFixed(1)}K
             </Typography>
-            <Typography variant="caption" color="text.secondary">Bytes Added</Typography>
+            <Typography variant="caption" color="text.secondary">
+              Bytes Added
+            </Typography>
           </CardContent>
         </Card>
       </Grid>
       <Grid item xs={6} sm={3}>
         <Card variant="outlined">
           <CardContent sx={{ py: 1, textAlign: 'center' }}>
-            <Typography variant="h5" fontWeight={600}>{summary.majorExpansions}</Typography>
-            <Typography variant="caption" color="text.secondary">Major Expansions</Typography>
+            <Typography variant="h5" fontWeight={600}>
+              {summary.majorExpansions}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              Major Expansions
+            </Typography>
           </CardContent>
         </Card>
       </Grid>
       <Grid item xs={6} sm={3}>
         <Card variant="outlined">
           <CardContent sx={{ py: 1, textAlign: 'center' }}>
-            <Typography variant="h5" fontWeight={600}>{summary.mostEditedArticles.length}</Typography>
-            <Typography variant="caption" color="text.secondary">Articles Touched</Typography>
+            <Typography variant="h5" fontWeight={600}>
+              {summary.mostEditedArticles.length}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              Articles Touched
+            </Typography>
           </CardContent>
         </Card>
       </Grid>
@@ -272,7 +297,7 @@ function StatsSummary({ contributions }: StatsSummaryProps) {
 
 export function ContributionsPanel() {
   const { data: dashboard } = useDashboard();
-  
+
   const [filters, setFilters] = useState<ContributionFilters>({
     type: 'all',
     search: '',
@@ -298,8 +323,7 @@ export function ContributionsPanel() {
       const search = filters.search.toLowerCase();
       result = result.filter(
         (c) =>
-          c.articleTitle.toLowerCase().includes(search) ||
-          c.summary.toLowerCase().includes(search)
+          c.articleTitle.toLowerCase().includes(search) || c.summary.toLowerCase().includes(search)
       );
     }
 
@@ -483,7 +507,11 @@ export function ContributionsPanel() {
       ) : (
         <EmptyState
           title="No contributions found"
-          description={filters.search || filters.type !== 'all' ? 'Try adjusting your filters' : 'Start editing to see your contributions here'}
+          description={
+            filters.search || filters.type !== 'all'
+              ? 'Try adjusting your filters'
+              : 'Start editing to see your contributions here'
+          }
         />
       )}
     </Box>

@@ -17,11 +17,14 @@
       "Bash(npm run typecheck:*)",
       "Bash(npm run build:*)",
       "Bash(gh run watch:*)",
-      "WebFetch(domain:thomasvincent.github.io)"
+      "WebFetch(domain:thomasvincent.github.io)",
+      "Bash(xargs:*)",
+      "Bash(open:*)",
+      "Bash(grep:*)",
+      "Bash(npx husky init)",
+      "Bash(npm test:*)"
     ]
   },
   "enableAllProjectMcpServers": true,
-  "enabledMcpjsonServers": [
-    "apple-mail"
-  ]
+  "enabledMcpjsonServers": ["apple-mail"]
 }

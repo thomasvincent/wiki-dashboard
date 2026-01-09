@@ -1,9 +1,10 @@
 /**
  * Tasks Panel Component
  * Task management with CRUD operations, filtering, and prioritization
+ * Uses React 19 Actions for form handling
  */
 
-import { useState, useEffect, Fragment } from 'react';
+import { useState, useEffect, Fragment, useRef, memo } from 'react';
 import {
   Box,
   Button,
@@ -30,6 +31,8 @@ import {
   TextField,
   Tooltip,
   Typography,
+  Alert,
+  CircularProgress,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -43,13 +46,18 @@ import {
 } from '@mui/icons-material';
 import { format } from 'date-fns';
 import { StatusChip, SectionHeader, EmptyState } from '../common';
-import { useTaskStore, selectFilteredTasks, selectTaskStats } from '@presentation/hooks';
+import {
+  useTaskStore,
+  selectFilteredTasks,
+  selectTaskStats,
+  useTaskAction,
+} from '@presentation/hooks';
 import { useDashboard } from '@presentation/hooks/queries';
 import { sortTasksByPriority } from '@application/services';
 import { TASK_PRIORITY_DISPLAY } from '@domain/value-objects';
-import type { Task, TaskPriority, TaskStatus } from '@domain/entities';
+import type { Task, TaskStatus } from '@domain/entities';
 
-// === Task Form Dialog ===
+// === Task Form Dialog (React 19 Actions) ===
 
 interface TaskFormProps {
   open: boolean;
@@ -59,112 +67,113 @@ interface TaskFormProps {
 }
 
 function TaskFormDialog({ open, onClose, task, onSave }: TaskFormProps) {
-  const [title, setTitle] = useState(task?.title ?? '');
-  const [description, setDescription] = useState(task?.description ?? '');
-  const [priority, setPriority] = useState<TaskPriority>(task?.priority ?? 'medium');
-  const [status, setStatus] = useState<TaskStatus>(task?.status ?? 'not_started');
-  const [dueDate, setDueDate] = useState(task?.dueDate?.toISOString().split('T')[0] ?? '');
-  const [relatedArticles, setRelatedArticles] = useState(task?.relatedArticles.join(', ') ?? '');
+  const formRef = useRef<HTMLFormElement>(null);
 
-  const handleSubmit = () => {
-    if (!title.trim()) {return;}
-
-    onSave({
-      title: title.trim(),
-      description: description.trim(),
-      priority,
-      status,
-      dueDate: dueDate ? new Date(dueDate) : null,
-      relatedArticles: relatedArticles
-        .split(',')
-        .map((a) => a.trim())
-        .filter(Boolean),
-    });
-
+  // React 19 Action - handles form submission with built-in pending state
+  const { state, formAction, isPending } = useTaskAction((taskData) => {
+    onSave(taskData);
     onClose();
-    // Reset form
-    setTitle('');
-    setDescription('');
-    setPriority('medium');
-    setStatus('not_started');
-    setDueDate('');
-    setRelatedArticles('');
-  };
+    formRef.current?.reset();
+  });
+
+  // Reset form when dialog opens with new task
+  useEffect(() => {
+    if (open && formRef.current) {
+      formRef.current.reset();
+    }
+  }, [open, task?.id]);
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>{task ? 'Edit Task' : 'Add Task'}</DialogTitle>
-      <DialogContent>
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
-          <TextField
-            label="Title"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            fullWidth
-            required
-            autoFocus
-          />
-          <TextField
-            label="Description"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            fullWidth
-            multiline
-            rows={2}
-          />
-          <Grid container spacing={2}>
-            <Grid item xs={6}>
-              <FormControl fullWidth>
-                <InputLabel>Priority</InputLabel>
-                <Select
-                  value={priority}
-                  label="Priority"
-                  onChange={(e) => setPriority(e.target.value as TaskPriority)}
-                >
-                  <MenuItem value="high">High</MenuItem>
-                  <MenuItem value="medium">Medium</MenuItem>
-                  <MenuItem value="low">Low</MenuItem>
-                </Select>
-              </FormControl>
+      <form ref={formRef} action={formAction}>
+        <DialogTitle>{task ? 'Edit Task' : 'Add Task'}</DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
+            {state.status === 'error' && <Alert severity="error">{state.error}</Alert>}
+
+            <TextField
+              name="title"
+              label="Title"
+              defaultValue={task?.title ?? ''}
+              fullWidth
+              required
+              autoFocus
+              disabled={isPending}
+            />
+            <TextField
+              name="description"
+              label="Description"
+              defaultValue={task?.description ?? ''}
+              fullWidth
+              multiline
+              rows={2}
+              disabled={isPending}
+            />
+            <Grid container spacing={2}>
+              <Grid item xs={6}>
+                <FormControl fullWidth>
+                  <InputLabel>Priority</InputLabel>
+                  <Select
+                    name="priority"
+                    defaultValue={task?.priority ?? 'medium'}
+                    label="Priority"
+                    disabled={isPending}
+                  >
+                    <MenuItem value="high">High</MenuItem>
+                    <MenuItem value="medium">Medium</MenuItem>
+                    <MenuItem value="low">Low</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={6}>
+                <FormControl fullWidth>
+                  <InputLabel>Status</InputLabel>
+                  <Select
+                    name="status"
+                    defaultValue={task?.status ?? 'not_started'}
+                    label="Status"
+                    disabled={isPending}
+                  >
+                    <MenuItem value="not_started">Not Started</MenuItem>
+                    <MenuItem value="in_progress">In Progress</MenuItem>
+                    <MenuItem value="completed">Completed</MenuItem>
+                    <MenuItem value="blocked">Blocked</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
             </Grid>
-            <Grid item xs={6}>
-              <FormControl fullWidth>
-                <InputLabel>Status</InputLabel>
-                <Select
-                  value={status}
-                  label="Status"
-                  onChange={(e) => setStatus(e.target.value as TaskStatus)}
-                >
-                  <MenuItem value="not_started">Not Started</MenuItem>
-                  <MenuItem value="in_progress">In Progress</MenuItem>
-                  <MenuItem value="completed">Completed</MenuItem>
-                  <MenuItem value="blocked">Blocked</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-          </Grid>
-          <TextField
-            label="Due Date"
-            type="date"
-            value={dueDate}
-            onChange={(e) => setDueDate(e.target.value)}
-            InputLabelProps={{ shrink: true }}
-          />
-          <TextField
-            label="Related Articles"
-            value={relatedArticles}
-            onChange={(e) => setRelatedArticles(e.target.value)}
-            placeholder="Article 1, Article 2, ..."
-            helperText="Comma-separated list of article titles"
-          />
-        </Box>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
-        <Button onClick={handleSubmit} variant="contained" disabled={!title.trim()}>
-          {task ? 'Update' : 'Add'}
-        </Button>
-      </DialogActions>
+            <TextField
+              name="dueDate"
+              label="Due Date"
+              type="date"
+              defaultValue={task?.dueDate?.toISOString().split('T')[0] ?? ''}
+              InputLabelProps={{ shrink: true }}
+              disabled={isPending}
+            />
+            <TextField
+              name="relatedArticles"
+              label="Related Articles"
+              defaultValue={task?.relatedArticles.join(', ') ?? ''}
+              placeholder="Article 1, Article 2, ..."
+              helperText="Comma-separated list of article titles"
+              disabled={isPending}
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={onClose} disabled={isPending}>
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            variant="contained"
+            disabled={isPending}
+            startIcon={isPending ? <CircularProgress size={16} /> : null}
+          >
+            {isPending ? 'Saving...' : task ? 'Update' : 'Add'}
+          </Button>
+        </DialogActions>
+      </form>
     </Dialog>
   );
 }
@@ -178,7 +187,12 @@ interface TaskListItemProps {
   onDelete: (id: string) => void;
 }
 
-function TaskListItem({ task, onToggleComplete, onEdit, onDelete }: TaskListItemProps) {
+const TaskListItem = memo(function TaskListItem({
+  task,
+  onToggleComplete,
+  onEdit,
+  onDelete,
+}: TaskListItemProps) {
   const priorityColor = TASK_PRIORITY_DISPLAY[task.priority].color;
   const isCompleted = task.status === 'completed';
   const isBlocked = task.status === 'blocked';
@@ -190,26 +204,38 @@ function TaskListItem({ task, onToggleComplete, onEdit, onDelete }: TaskListItem
       secondaryAction={
         <Box sx={{ display: 'flex', gap: 0.5 }}>
           <Tooltip title="Edit">
-            <IconButton size="small" onClick={() => onEdit(task)}>
+            <IconButton
+              size="small"
+              onClick={() => onEdit(task)}
+              aria-label={`Edit task: ${task.title}`}
+            >
               <EditIcon fontSize="small" />
             </IconButton>
           </Tooltip>
           <Tooltip title="Delete">
-            <IconButton size="small" onClick={() => onDelete(task.id)}>
+            <IconButton
+              size="small"
+              onClick={() => onDelete(task.id)}
+              aria-label={`Delete task: ${task.title}`}
+            >
               <DeleteIcon fontSize="small" />
             </IconButton>
           </Tooltip>
         </Box>
       }
     >
-      <ListItemButton onClick={() => onToggleComplete(task.id)} sx={{ pr: 10 }}>
+      <ListItemButton
+        onClick={() => onToggleComplete(task.id)}
+        sx={{ pr: 10 }}
+        aria-label={`Toggle completion for: ${task.title}`}
+      >
         <ListItemIcon sx={{ minWidth: 40 }}>
           {isCompleted ? (
-            <CheckIcon color="success" />
+            <CheckIcon color="success" aria-label="Completed" />
           ) : isBlocked ? (
-            <BlockIcon color="error" />
+            <BlockIcon color="error" aria-label="Blocked" />
           ) : (
-            <UncheckedIcon color="action" />
+            <UncheckedIcon color="action" aria-label="Not started" />
           )}
         </ListItemIcon>
         <ListItemText
@@ -225,9 +251,17 @@ function TaskListItem({ task, onToggleComplete, onEdit, onDelete }: TaskListItem
               >
                 {task.title}
               </Typography>
-              <FlagIcon sx={{ fontSize: 14, color: priorityColor }} />
+              <FlagIcon
+                sx={{ fontSize: 14, color: priorityColor }}
+                aria-label={`Priority: ${task.priority}`}
+              />
               {isOverdue && (
-                <Chip label="Overdue" size="small" color="error" sx={{ height: 18, fontSize: '0.65rem' }} />
+                <Chip
+                  label="Overdue"
+                  size="small"
+                  color="error"
+                  sx={{ height: 18, fontSize: '0.65rem' }}
+                />
               )}
             </Box>
           }
@@ -245,7 +279,7 @@ function TaskListItem({ task, onToggleComplete, onEdit, onDelete }: TaskListItem
       </ListItemButton>
     </ListItem>
   );
-}
+});
 
 // === Stats Summary ===
 
@@ -257,40 +291,60 @@ function TaskStats() {
       <Grid item xs={6} sm={2.4}>
         <Card variant="outlined">
           <CardContent sx={{ py: 1, textAlign: 'center' }}>
-            <Typography variant="h5" fontWeight={600}>{stats.total}</Typography>
-            <Typography variant="caption" color="text.secondary">Total</Typography>
+            <Typography variant="h5" fontWeight={600}>
+              {stats.total}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              Total
+            </Typography>
           </CardContent>
         </Card>
       </Grid>
       <Grid item xs={6} sm={2.4}>
         <Card variant="outlined">
           <CardContent sx={{ py: 1, textAlign: 'center' }}>
-            <Typography variant="h5" fontWeight={600} color="success.main">{stats.completed}</Typography>
-            <Typography variant="caption" color="text.secondary">Completed</Typography>
+            <Typography variant="h5" fontWeight={600} color="success.main">
+              {stats.completed}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              Completed
+            </Typography>
           </CardContent>
         </Card>
       </Grid>
       <Grid item xs={6} sm={2.4}>
         <Card variant="outlined">
           <CardContent sx={{ py: 1, textAlign: 'center' }}>
-            <Typography variant="h5" fontWeight={600} color="info.main">{stats.inProgress}</Typography>
-            <Typography variant="caption" color="text.secondary">In Progress</Typography>
+            <Typography variant="h5" fontWeight={600} color="info.main">
+              {stats.inProgress}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              In Progress
+            </Typography>
           </CardContent>
         </Card>
       </Grid>
       <Grid item xs={6} sm={2.4}>
         <Card variant="outlined">
           <CardContent sx={{ py: 1, textAlign: 'center' }}>
-            <Typography variant="h5" fontWeight={600} color="error.main">{stats.blocked}</Typography>
-            <Typography variant="caption" color="text.secondary">Blocked</Typography>
+            <Typography variant="h5" fontWeight={600} color="error.main">
+              {stats.blocked}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              Blocked
+            </Typography>
           </CardContent>
         </Card>
       </Grid>
       <Grid item xs={6} sm={2.4}>
         <Card variant="outlined">
           <CardContent sx={{ py: 1, textAlign: 'center' }}>
-            <Typography variant="h5" fontWeight={600} color="warning.main">{stats.highPriority}</Typography>
-            <Typography variant="caption" color="text.secondary">High Priority</Typography>
+            <Typography variant="h5" fontWeight={600} color="warning.main">
+              {stats.highPriority}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              High Priority
+            </Typography>
           </CardContent>
         </Card>
       </Grid>
@@ -427,15 +481,13 @@ export function TasksPanel() {
       ) : (
         <EmptyState
           title="No tasks found"
-          description={filter.search || filter.status !== 'all' || filter.priority !== 'all'
-            ? 'Try adjusting your filters'
-            : 'Add a task to get started'}
+          description={
+            filter.search || filter.status !== 'all' || filter.priority !== 'all'
+              ? 'Try adjusting your filters'
+              : 'Add a task to get started'
+          }
           action={
-            <Button
-              variant="contained"
-              startIcon={<AddIcon />}
-              onClick={() => setDialogOpen(true)}
-            >
+            <Button variant="contained" startIcon={<AddIcon />} onClick={() => setDialogOpen(true)}>
               Add Task
             </Button>
           }

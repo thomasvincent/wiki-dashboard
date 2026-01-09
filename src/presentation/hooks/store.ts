@@ -7,7 +7,6 @@
 import { create } from 'zustand';
 import { persist, devtools } from 'zustand/middleware';
 import type {
-  EditorDashboard,
   Task,
   TaskStatus,
   TaskPriority,
@@ -15,6 +14,9 @@ import type {
   TemplateCategory,
   ResearchItem,
   ResearchPriority,
+  Draft,
+  FocusArea,
+  CoiDisclosure,
 } from '@domain/entities';
 
 // === Section Types ===
@@ -67,14 +69,23 @@ export const useUIStore = create<UIState & UIActions>()(
         darkMode: false,
         activeSection: 'overview',
         drillDownPath: [],
-        expandedNavGroups: ['dashboard', 'my-work', 'monitoring', 'analytics', 'tools', 'community', 'account'],
+        expandedNavGroups: [
+          'dashboard',
+          'my-work',
+          'monitoring',
+          'analytics',
+          'tools',
+          'community',
+          'account',
+        ],
 
         // Actions
         toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
         setSidebarOpen: (open) => set({ sidebarOpen: open }),
         toggleDarkMode: () => set((state) => ({ darkMode: !state.darkMode })),
         setActiveSection: (section) => set({ activeSection: section, drillDownPath: [] }),
-        pushDrillDown: (path) => set((state) => ({ drillDownPath: [...state.drillDownPath, path] })),
+        pushDrillDown: (path) =>
+          set((state) => ({ drillDownPath: [...state.drillDownPath, path] })),
         popDrillDown: () => set((state) => ({ drillDownPath: state.drillDownPath.slice(0, -1) })),
         clearDrillDown: () => set({ drillDownPath: [] }),
         toggleNavGroup: (groupId) =>
@@ -91,39 +102,9 @@ export const useUIStore = create<UIState & UIActions>()(
 );
 
 // === Dashboard Data State ===
-
-interface DashboardState {
-  dashboard: EditorDashboard | null;
-  isLoading: boolean;
-  error: string | null;
-  lastRefresh: Date | null;
-}
-
-interface DashboardActions {
-  setDashboard: (dashboard: EditorDashboard) => void;
-  setLoading: (loading: boolean) => void;
-  setError: (error: string | null) => void;
-  clearDashboard: () => void;
-}
-
-export const useDashboardStore = create<DashboardState & DashboardActions>()(
-  devtools(
-    (set) => ({
-      // State
-      dashboard: null,
-      isLoading: false,
-      error: null,
-      lastRefresh: null,
-      
-      // Actions
-      setDashboard: (dashboard) => set({ dashboard, lastRefresh: new Date(), error: null }),
-      setLoading: (isLoading) => set({ isLoading }),
-      setError: (error) => set({ error, isLoading: false }),
-      clearDashboard: () => set({ dashboard: null, error: null }),
-    }),
-    { name: 'DashboardStore' }
-  )
-);
+// NOTE: Dashboard data is now managed entirely by React Query (see queries.ts)
+// The useDashboard() hook provides: data, isLoading, error, dataUpdatedAt
+// This eliminates the anti-pattern of syncing server state to Zustand
 
 // === Task State (Local) ===
 
@@ -156,7 +137,7 @@ export const useTaskStore = create<TaskState & TaskActions>()(
           priority: 'all',
           search: '',
         },
-        
+
         // Actions
         setTasks: (tasks) => set({ tasks }),
         addTask: (taskData) =>
@@ -215,8 +196,7 @@ export const selectFilteredTasks = (state: TaskState): Task[] => {
     if (state.filter.search) {
       const search = state.filter.search.toLowerCase();
       return (
-        task.title.toLowerCase().includes(search) ||
-        task.description.toLowerCase().includes(search)
+        task.title.toLowerCase().includes(search) || task.description.toLowerCase().includes(search)
       );
     }
     return true;
@@ -228,7 +208,9 @@ export const selectTaskStats = (state: TaskState) => {
   const completed = state.tasks.filter((t) => t.status === 'completed').length;
   const inProgress = state.tasks.filter((t) => t.status === 'in_progress').length;
   const blocked = state.tasks.filter((t) => t.status === 'blocked').length;
-  const highPriority = state.tasks.filter((t) => t.priority === 'high' && t.status !== 'completed').length;
+  const highPriority = state.tasks.filter(
+    (t) => t.priority === 'high' && t.status !== 'completed'
+  ).length;
 
   return { total, completed, inProgress, blocked, highPriority };
 };
@@ -455,10 +437,7 @@ interface AuthActions {
     registrationDate?: string;
   }) => void;
   logout: () => void;
-  updateUserInfo: (data: {
-    editCount?: number;
-    groups?: string[];
-  }) => void;
+  updateUserInfo: (data: { editCount?: number; groups?: string[] }) => void;
   setUsername: (username: string) => void;
 }
 
@@ -555,5 +534,276 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
       { name: 'wiki-dashboard-settings' }
     ),
     { name: 'SettingsStore' }
+  )
+);
+
+// === Draft Store ===
+
+interface DraftState {
+  drafts: Draft[];
+}
+
+interface DraftActions {
+  setDrafts: (drafts: Draft[]) => void;
+  addDraft: (draft: Omit<Draft, 'id'>) => void;
+  updateDraft: (id: string, updates: Partial<Draft>) => void;
+  deleteDraft: (id: string) => void;
+}
+
+const DEFAULT_DRAFTS: Draft[] = [
+  {
+    id: '1',
+    title: 'Joseph Bennion',
+    pageUrl: 'https://en.wikipedia.org/wiki/Draft:Joseph_Bennion',
+    talkPageUrl: 'https://en.wikipedia.org/wiki/Draft_talk:Joseph_Bennion',
+    status: 'pending_review',
+    createdAt: new Date('2026-01-01'),
+    lastEditedAt: new Date('2026-01-01'),
+    submittedAt: new Date('2026-01-01'),
+    coiDisclosed: true,
+    coiDetails: 'Personal acquaintance',
+    notes: 'Submitted via AfC wizard',
+    afcLogUrl: 'https://en.wikipedia.org/wiki/Special:Log?type=review&page=Draft%3AJoseph+Bennion',
+  },
+  {
+    id: '2',
+    title: 'Lee Udall Bennion',
+    pageUrl: 'https://en.wikipedia.org/wiki/Draft:Lee_Udall_Bennion',
+    talkPageUrl: 'https://en.wikipedia.org/wiki/Draft_talk:Lee_Udall_Bennion',
+    status: 'under_review',
+    createdAt: new Date('2026-01-01'),
+    lastEditedAt: new Date('2026-01-01'),
+    submittedAt: new Date('2026-01-01'),
+    coiDisclosed: true,
+    coiDetails: 'Personal acquaintance',
+    notes: 'Reviewer feedback received on secondary sources',
+    afcLogUrl:
+      'https://en.wikipedia.org/wiki/Special:Log?type=review&page=Draft%3ALee+Udall+Bennion',
+  },
+  {
+    id: '3',
+    title: 'Jeffery Hotel',
+    pageUrl: 'https://en.wikipedia.org/wiki/User:Sparks19923/Jeffery_Hotel',
+    talkPageUrl: 'https://en.wikipedia.org/wiki/User_talk:Sparks19923/Jeffery_Hotel',
+    status: 'in_development',
+    createdAt: new Date('2025-12-31'),
+    lastEditedAt: new Date('2025-12-31'),
+    submittedAt: null,
+    coiDisclosed: true,
+    coiDetails: 'Distant descendant of founder',
+    notes: 'NRHP-listed hotel',
+    afcLogUrl: null,
+  },
+];
+
+export const useDraftStore = create<DraftState & DraftActions>()(
+  devtools(
+    persist(
+      (set) => ({
+        drafts: DEFAULT_DRAFTS,
+
+        setDrafts: (drafts) => set({ drafts }),
+        addDraft: (draftData) =>
+          set((state) => ({
+            drafts: [...state.drafts, { ...draftData, id: crypto.randomUUID() }],
+          })),
+        updateDraft: (id, updates) =>
+          set((state) => ({
+            drafts: state.drafts.map((d) => (d.id === id ? { ...d, ...updates } : d)),
+          })),
+        deleteDraft: (id) =>
+          set((state) => ({
+            drafts: state.drafts.filter((d) => d.id !== id),
+          })),
+      }),
+      { name: 'wiki-dashboard-drafts' }
+    ),
+    { name: 'DraftStore' }
+  )
+);
+
+// === Focus Area Store ===
+
+interface FocusAreaState {
+  focusAreas: FocusArea[];
+}
+
+interface FocusAreaActions {
+  setFocusAreas: (focusAreas: FocusArea[]) => void;
+  addFocusArea: (focusArea: Omit<FocusArea, 'id'>) => void;
+  updateFocusArea: (id: string, updates: Partial<FocusArea>) => void;
+  deleteFocusArea: (id: string) => void;
+}
+
+const DEFAULT_FOCUS_AREAS: FocusArea[] = [
+  {
+    id: '1',
+    name: 'Boarding Schools',
+    description: 'Educational institutions - prep schools',
+    status: 'active',
+    articles: [
+      {
+        title: 'Wasatch Academy',
+        url: 'https://en.wikipedia.org/wiki/Wasatch_Academy',
+        status: 'start',
+        lastEdited: new Date('2025-12-28'),
+      },
+      {
+        title: 'Deerfield Academy',
+        url: 'https://en.wikipedia.org/wiki/Deerfield_Academy',
+        status: 'start',
+        lastEdited: new Date('2026-01-06'),
+      },
+    ],
+    wikiProjects: ['WikiProject Schools'],
+  },
+  {
+    id: '2',
+    name: 'Cherokee History',
+    description: 'Cherokee history and Native American leaders',
+    status: 'active',
+    articles: [
+      {
+        title: 'Yonaguska',
+        url: 'https://en.wikipedia.org/wiki/Yonaguska',
+        status: 'start',
+        lastEdited: new Date('2025-12-30'),
+      },
+      { title: 'Middle Towns (Cherokee)', url: '', status: 'draft', lastEdited: null },
+      { title: 'Lower Towns (Cherokee)', url: '', status: 'draft', lastEdited: null },
+    ],
+    wikiProjects: ['WikiProject Indigenous peoples of North America'],
+  },
+  {
+    id: '3',
+    name: 'California Gold Rush',
+    description: 'Historic buildings and districts in Gold Country',
+    status: 'planned',
+    articles: [
+      { title: 'Jeffery Hotel', url: '', status: 'draft', lastEdited: null },
+      {
+        title: 'Coulterville Main Street Historic District',
+        url: '',
+        status: 'draft',
+        lastEdited: null,
+      },
+    ],
+    wikiProjects: ['WikiProject California', 'WikiProject National Register of Historic Places'],
+  },
+  {
+    id: '4',
+    name: 'Sanpete County, Utah',
+    description: 'Utah regional content - Feb 2026 targets',
+    status: 'planned',
+    articles: [
+      { title: 'Liberal Hall', url: '', status: 'draft', lastEdited: null },
+      {
+        title: 'First Presbyterian Church (Mt. Pleasant)',
+        url: '',
+        status: 'draft',
+        lastEdited: null,
+      },
+    ],
+    wikiProjects: ['WikiProject Utah'],
+  },
+];
+
+export const useFocusAreaStore = create<FocusAreaState & FocusAreaActions>()(
+  devtools(
+    persist(
+      (set) => ({
+        focusAreas: DEFAULT_FOCUS_AREAS,
+
+        setFocusAreas: (focusAreas) => set({ focusAreas }),
+        addFocusArea: (focusAreaData) =>
+          set((state) => ({
+            focusAreas: [...state.focusAreas, { ...focusAreaData, id: crypto.randomUUID() }],
+          })),
+        updateFocusArea: (id, updates) =>
+          set((state) => ({
+            focusAreas: state.focusAreas.map((f) => (f.id === id ? { ...f, ...updates } : f)),
+          })),
+        deleteFocusArea: (id) =>
+          set((state) => ({
+            focusAreas: state.focusAreas.filter((f) => f.id !== id),
+          })),
+      }),
+      { name: 'wiki-dashboard-focus-areas' }
+    ),
+    { name: 'FocusAreaStore' }
+  )
+);
+
+// === COI Disclosure Store ===
+
+interface CoiState {
+  disclosures: CoiDisclosure[];
+}
+
+interface CoiActions {
+  setDisclosures: (disclosures: CoiDisclosure[]) => void;
+  addDisclosure: (disclosure: Omit<CoiDisclosure, 'id'>) => void;
+  updateDisclosure: (id: string, updates: Partial<CoiDisclosure>) => void;
+  deleteDisclosure: (id: string) => void;
+}
+
+const DEFAULT_COI_DISCLOSURES: CoiDisclosure[] = [
+  {
+    id: '1',
+    subject: 'Wasatch Academy',
+    relationship: 'Alumnus & Advancement Committee member',
+    disclosureUrl: 'https://en.wikipedia.org/wiki/User_talk:Sparks19923',
+    disclosedAt: new Date('2025-12-31'),
+    isActive: true,
+  },
+  {
+    id: '2',
+    subject: 'Jeffery Hotel',
+    relationship: 'Distant descendant of founder',
+    disclosureUrl: 'https://en.wikipedia.org/wiki/User_talk:Sparks19923',
+    disclosedAt: new Date('2025-12-31'),
+    isActive: true,
+  },
+  {
+    id: '3',
+    subject: 'Joseph Bennion',
+    relationship: 'Personal acquaintance',
+    disclosureUrl: 'https://en.wikipedia.org/wiki/Draft_talk:Joseph_Bennion',
+    disclosedAt: new Date('2026-01-01'),
+    isActive: true,
+  },
+  {
+    id: '4',
+    subject: 'Lee Udall Bennion',
+    relationship: 'Personal acquaintance',
+    disclosureUrl: 'https://en.wikipedia.org/wiki/Draft_talk:Lee_Udall_Bennion',
+    disclosedAt: new Date('2026-01-01'),
+    isActive: true,
+  },
+];
+
+export const useCoiStore = create<CoiState & CoiActions>()(
+  devtools(
+    persist(
+      (set) => ({
+        disclosures: DEFAULT_COI_DISCLOSURES,
+
+        setDisclosures: (disclosures) => set({ disclosures }),
+        addDisclosure: (disclosureData) =>
+          set((state) => ({
+            disclosures: [...state.disclosures, { ...disclosureData, id: crypto.randomUUID() }],
+          })),
+        updateDisclosure: (id, updates) =>
+          set((state) => ({
+            disclosures: state.disclosures.map((d) => (d.id === id ? { ...d, ...updates } : d)),
+          })),
+        deleteDisclosure: (id) =>
+          set((state) => ({
+            disclosures: state.disclosures.filter((d) => d.id !== id),
+          })),
+      }),
+      { name: 'wiki-dashboard-coi' }
+    ),
+    { name: 'CoiStore' }
   )
 );
