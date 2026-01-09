@@ -4,32 +4,22 @@
  * Single Responsibility: Each service handles one aggregate
  */
 
-import type {
-  EditorDashboard,
-  Draft,
-  Contribution,
-  Task,
-  FocusArea,
-} from '@domain/entities';
-import type {
-  IDashboardRepository,
-  DashboardConfig,
-} from '@domain/repositories';
+import type { EditorDashboard, Draft, Contribution, Task, FocusArea } from '@domain/entities';
+import type { IDashboardRepository } from '@domain/repositories';
 
 // === Dashboard Service ===
+// Note: Username is now passed dynamically from useSettingsStore
+// This allows changing users without recreating the service
 
 export class DashboardService {
-  constructor(
-    private readonly dashboardRepo: IDashboardRepository,
-    private readonly config: DashboardConfig
-  ) {}
+  constructor(private readonly dashboardRepo: IDashboardRepository) {}
 
-  async getDashboard(): Promise<EditorDashboard> {
-    return this.dashboardRepo.getDashboard(this.config.username);
+  async getDashboard(username: string): Promise<EditorDashboard> {
+    return this.dashboardRepo.getDashboard(username);
   }
 
-  async refreshDashboard(): Promise<EditorDashboard> {
-    return this.dashboardRepo.refreshDashboard(this.config.username);
+  async refreshDashboard(username: string): Promise<EditorDashboard> {
+    return this.dashboardRepo.refreshDashboard(username);
   }
 }
 
@@ -81,14 +71,11 @@ export interface ContributionSummary {
 
 export function analyzeContributions(contributions: readonly Contribution[]): ContributionSummary {
   const articleCounts = new Map<string, number>();
-  
+
   const base = contributions.reduce(
     (acc, contrib) => {
-      articleCounts.set(
-        contrib.articleTitle,
-        (articleCounts.get(contrib.articleTitle) ?? 0) + 1
-      );
-      
+      articleCounts.set(contrib.articleTitle, (articleCounts.get(contrib.articleTitle) ?? 0) + 1);
+
       return {
         ...acc,
         totalEdits: acc.totalEdits + 1,
@@ -148,7 +135,7 @@ export function sortTasksByPriority(tasks: readonly Task[]): readonly Task[] {
     medium: 1,
     low: 2,
   };
-  
+
   return [...tasks].sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
 }
 
@@ -162,19 +149,22 @@ export interface FocusAreaProgress {
   readonly progressPercent: number;
 }
 
-export function calculateFocusAreaProgress(focusAreas: readonly FocusArea[]): readonly FocusAreaProgress[] {
+export function calculateFocusAreaProgress(
+  focusAreas: readonly FocusArea[]
+): readonly FocusAreaProgress[] {
   return focusAreas.map((area) => {
     const totalArticles = area.articles.length;
-    const completedArticles = area.articles.filter(
-      (a) => ['b_class', 'ga', 'fa'].includes(a.status)
+    const completedArticles = area.articles.filter((a) =>
+      ['b_class', 'ga', 'fa'].includes(a.status)
     ).length;
-    
+
     return {
       id: area.id,
       name: area.name,
       totalArticles,
       completedArticles,
-      progressPercent: totalArticles > 0 ? Math.round((completedArticles / totalArticles) * 100) : 0,
+      progressPercent:
+        totalArticles > 0 ? Math.round((completedArticles / totalArticles) * 100) : 0,
     };
   });
 }

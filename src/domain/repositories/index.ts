@@ -68,16 +68,16 @@ export interface IDashboardRepository {
 }
 
 // === Configuration ===
+// Note: Username is managed by useSettingsStore (centralized, persisted)
+// Do not add username here - it's passed dynamically to all repository methods
 
 export interface DashboardConfig {
-  readonly username: string;
   readonly refreshIntervalMs: number;
   readonly maxRecentContributions: number;
   readonly activityDays: number;
 }
 
 export const DEFAULT_CONFIG: DashboardConfig = {
-  username: 'Sparks19923',
   refreshIntervalMs: 300_000, // 5 minutes
   maxRecentContributions: 50,
   activityDays: 30,

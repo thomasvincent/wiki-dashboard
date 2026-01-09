@@ -3,7 +3,7 @@
  * Displays all drafts with filtering and drill-down
  */
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, memo } from 'react';
 import {
   Box,
   Card,
@@ -57,13 +57,9 @@ interface DraftRowProps {
   onSelect: (draft: Draft) => void;
 }
 
-function DraftRow({ draft, onSelect }: DraftRowProps) {
+const DraftRow = memo(function DraftRow({ draft, onSelect }: DraftRowProps) {
   return (
-    <TableRow
-      hover
-      sx={{ cursor: 'pointer' }}
-      onClick={() => onSelect(draft)}
-    >
+    <TableRow hover sx={{ cursor: 'pointer' }} onClick={() => onSelect(draft)}>
       <TableCell>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <Typography variant="body2" fontWeight={500}>
@@ -71,11 +67,21 @@ function DraftRow({ draft, onSelect }: DraftRowProps) {
           </Typography>
           {draft.coiDisclosed && (
             <Tooltip title="COI Disclosed">
-              <Chip label="COI" size="small" variant="outlined" sx={{ height: 18, fontSize: '0.65rem' }} />
+              <Chip
+                label="COI"
+                size="small"
+                variant="outlined"
+                sx={{ height: 18, fontSize: '0.65rem' }}
+              />
             </Tooltip>
           )}
         </Box>
-        <Typography variant="caption" color="text.secondary" noWrap sx={{ maxWidth: 300, display: 'block' }}>
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          noWrap
+          sx={{ maxWidth: 300, display: 'block' }}
+        >
           {draft.notes}
         </Typography>
       </TableCell>
@@ -83,9 +89,7 @@ function DraftRow({ draft, onSelect }: DraftRowProps) {
         <StatusChip status={draft.status} type="draft" />
       </TableCell>
       <TableCell>
-        <Typography variant="body2">
-          {format(draft.lastEditedAt, 'MMM d, yyyy')}
-        </Typography>
+        <Typography variant="body2">{format(draft.lastEditedAt, 'MMM d, yyyy')}</Typography>
         <Typography variant="caption" color="text.secondary">
           {format(draft.lastEditedAt, 'h:mm a')}
         </Typography>
@@ -93,9 +97,7 @@ function DraftRow({ draft, onSelect }: DraftRowProps) {
       <TableCell>
         {draft.submittedAt ? (
           <>
-            <Typography variant="body2">
-              {format(draft.submittedAt, 'MMM d, yyyy')}
-            </Typography>
+            <Typography variant="body2">{format(draft.submittedAt, 'MMM d, yyyy')}</Typography>
           </>
         ) : (
           <Typography variant="body2" color="text.secondary">
@@ -108,6 +110,7 @@ function DraftRow({ draft, onSelect }: DraftRowProps) {
           <Tooltip title="Open draft">
             <IconButton
               size="small"
+              aria-label={`Open draft: ${draft.title}`}
               onClick={(e) => {
                 e.stopPropagation();
                 window.open(draft.pageUrl, '_blank');
@@ -119,6 +122,7 @@ function DraftRow({ draft, onSelect }: DraftRowProps) {
           <Tooltip title="Talk page">
             <IconButton
               size="small"
+              aria-label={`Open talk page for: ${draft.title}`}
               onClick={(e) => {
                 e.stopPropagation();
                 window.open(draft.talkPageUrl, '_blank');
@@ -131,6 +135,7 @@ function DraftRow({ draft, onSelect }: DraftRowProps) {
             <Tooltip title="AfC log">
               <IconButton
                 size="small"
+                aria-label={`View AfC log for: ${draft.title}`}
                 onClick={(e) => {
                   e.stopPropagation();
                   window.open(draft.afcLogUrl!, '_blank');
@@ -144,7 +149,7 @@ function DraftRow({ draft, onSelect }: DraftRowProps) {
       </TableCell>
     </TableRow>
   );
-}
+});
 
 // === Draft Detail Panel ===
 
@@ -166,10 +171,17 @@ function DraftDetail({ draft, onBack }: DraftDetailProps) {
           ← Back to drafts
         </Typography>
       </Box>
-      
+
       <Card>
         <CardContent>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+          <Box
+            sx={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'flex-start',
+              mb: 2,
+            }}
+          >
             <Box>
               <Typography variant="h5" gutterBottom>
                 {draft.title}
@@ -187,27 +199,39 @@ function DraftDetail({ draft, onBack }: DraftDetailProps) {
 
           <Grid container spacing={2}>
             <Grid item xs={12} sm={6}>
-              <Typography variant="caption" color="text.secondary">Created</Typography>
+              <Typography variant="caption" color="text.secondary">
+                Created
+              </Typography>
               <Typography variant="body2">{format(draft.createdAt, 'MMMM d, yyyy')}</Typography>
             </Grid>
             <Grid item xs={12} sm={6}>
-              <Typography variant="caption" color="text.secondary">Last Edited</Typography>
-              <Typography variant="body2">{format(draft.lastEditedAt, 'MMMM d, yyyy h:mm a')}</Typography>
+              <Typography variant="caption" color="text.secondary">
+                Last Edited
+              </Typography>
+              <Typography variant="body2">
+                {format(draft.lastEditedAt, 'MMMM d, yyyy h:mm a')}
+              </Typography>
             </Grid>
             <Grid item xs={12} sm={6}>
-              <Typography variant="caption" color="text.secondary">Submitted</Typography>
+              <Typography variant="caption" color="text.secondary">
+                Submitted
+              </Typography>
               <Typography variant="body2">
                 {draft.submittedAt ? format(draft.submittedAt, 'MMMM d, yyyy') : 'Not submitted'}
               </Typography>
             </Grid>
             <Grid item xs={12} sm={6}>
-              <Typography variant="caption" color="text.secondary">COI Status</Typography>
+              <Typography variant="caption" color="text.secondary">
+                COI Status
+              </Typography>
               <Typography variant="body2">
                 {draft.coiDisclosed ? `Disclosed: ${draft.coiDetails}` : 'Not disclosed'}
               </Typography>
             </Grid>
             <Grid item xs={12}>
-              <Typography variant="caption" color="text.secondary">Notes</Typography>
+              <Typography variant="caption" color="text.secondary">
+                Notes
+              </Typography>
               <Typography variant="body2">{draft.notes || 'No notes'}</Typography>
             </Grid>
           </Grid>
@@ -228,7 +252,7 @@ function DraftDetail({ draft, onBack }: DraftDetailProps) {
 export function DraftsPanel() {
   const { drillDownPath, pushDrillDown, popDrillDown } = useUIStore();
   const { data: dashboard } = useDashboard();
-  
+
   const [filters, setFilters] = useState<DraftFilters>({ status: 'all', search: '' });
   const [sortField, setSortField] = useState<SortField>('lastEditedAt');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
@@ -246,9 +270,7 @@ export function DraftsPanel() {
     if (filters.search) {
       const search = filters.search.toLowerCase();
       result = result.filter(
-        (d) =>
-          d.title.toLowerCase().includes(search) ||
-          d.notes.toLowerCase().includes(search)
+        (d) => d.title.toLowerCase().includes(search) || d.notes.toLowerCase().includes(search)
       );
     }
 
@@ -386,11 +408,7 @@ export function DraftsPanel() {
             </TableHead>
             <TableBody>
               {filteredDrafts.map((draft) => (
-                <DraftRow
-                  key={draft.id}
-                  draft={draft}
-                  onSelect={(d) => pushDrillDown(d.id)}
-                />
+                <DraftRow key={draft.id} draft={draft} onSelect={(d) => pushDrillDown(d.id)} />
               ))}
             </TableBody>
           </Table>
@@ -398,7 +416,11 @@ export function DraftsPanel() {
       ) : (
         <EmptyState
           title="No drafts found"
-          description={filters.search || filters.status !== 'all' ? 'Try adjusting your filters' : 'Create a new draft to get started'}
+          description={
+            filters.search || filters.status !== 'all'
+              ? 'Try adjusting your filters'
+              : 'Create a new draft to get started'
+          }
         />
       )}
     </Box>

@@ -1,15 +1,15 @@
 /**
  * React Query Hooks
  * Data fetching with caching, refetching, and error handling
- * Follows React Query best practices for 2026
+ * Follows React Query best practices - let React Query manage state
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { DashboardRepository } from '@infrastructure/repositories';
+import { createDashboardRepository } from '@infrastructure/repositories';
 import { DEFAULT_CONFIG } from '@domain/repositories';
 import { wikipediaApi } from '@infrastructure/api/wikipedia-client';
 import { wikimediaRestApi } from '@infrastructure/api/wikimedia-rest-client';
-import { useDashboardStore } from './store';
+import { useSettingsStore } from './store';
 import type { EditorDashboard } from '@domain/entities';
 
 // === Query Keys ===
@@ -32,31 +32,27 @@ export const queryKeys = {
   recentEdits: (username: string) => ['recentEdits', username] as const,
 } as const;
 
-// === Repository Instance ===
+// === Repository Instance (Singleton) ===
 
-const dashboardRepo = new DashboardRepository(DEFAULT_CONFIG);
+const dashboardRepo = createDashboardRepository(DEFAULT_CONFIG);
+
+// === Custom hook to get configured username ===
+
+export function useConfiguredUsername(): string {
+  const { configuredUsername } = useSettingsStore();
+  return configuredUsername;
+}
 
 // === Dashboard Hook ===
+// Let React Query manage loading/error state - no manual Zustand sync
 
-export function useDashboard(username: string = DEFAULT_CONFIG.username) {
-  const { setDashboard, setLoading, setError } = useDashboardStore();
+export function useDashboard(username?: string) {
+  const configuredUsername = useConfiguredUsername();
+  const effectiveUsername = username ?? configuredUsername;
 
   return useQuery({
-    queryKey: queryKeys.dashboard(username),
-    queryFn: async (): Promise<EditorDashboard> => {
-      setLoading(true);
-      try {
-        const dashboard = await dashboardRepo.getDashboard(username);
-        setDashboard(dashboard);
-        return dashboard;
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Failed to load dashboard';
-        setError(message);
-        throw error;
-      } finally {
-        setLoading(false);
-      }
-    },
+    queryKey: queryKeys.dashboard(effectiveUsername),
+    queryFn: (): Promise<EditorDashboard> => dashboardRepo.getDashboard(effectiveUsername),
     staleTime: 60_000, // Consider data fresh for 1 minute
     refetchInterval: DEFAULT_CONFIG.refreshIntervalMs, // Auto-refresh every 5 minutes
     refetchOnWindowFocus: true,
@@ -67,53 +63,49 @@ export function useDashboard(username: string = DEFAULT_CONFIG.username) {
 
 // === Refresh Dashboard Mutation ===
 
-export function useRefreshDashboard(username: string = DEFAULT_CONFIG.username) {
+export function useRefreshDashboard(username?: string) {
   const queryClient = useQueryClient();
-  const { setDashboard, setLoading, setError } = useDashboardStore();
+  const configuredUsername = useConfiguredUsername();
+  const effectiveUsername = username ?? configuredUsername;
 
   return useMutation({
-    mutationFn: async (): Promise<EditorDashboard> => {
-      setLoading(true);
-      try {
-        const dashboard = await dashboardRepo.refreshDashboard(username);
-        setDashboard(dashboard);
-        return dashboard;
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Failed to refresh dashboard';
-        setError(message);
-        throw error;
-      } finally {
-        setLoading(false);
-      }
-    },
+    mutationFn: (): Promise<EditorDashboard> => dashboardRepo.refreshDashboard(effectiveUsername),
     onSuccess: (data) => {
-      queryClient.setQueryData(queryKeys.dashboard(username), data);
+      queryClient.setQueryData(queryKeys.dashboard(effectiveUsername), data);
     },
   });
 }
 
 // === Prefetch Hook ===
 
-export function usePrefetchDashboard(username: string = DEFAULT_CONFIG.username) {
+export function usePrefetchDashboard(username?: string) {
   const queryClient = useQueryClient();
+  const configuredUsername = useConfiguredUsername();
+  const effectiveUsername = username ?? configuredUsername;
 
   return () => {
     queryClient.prefetchQuery({
-      queryKey: queryKeys.dashboard(username),
-      queryFn: () => dashboardRepo.getDashboard(username),
+      queryKey: queryKeys.dashboard(effectiveUsername),
+      queryFn: () => dashboardRepo.getDashboard(effectiveUsername),
       staleTime: 60_000,
     });
   };
 }
 
 // === Time Since Last Update ===
+// Uses React Query's dataUpdatedAt instead of manual Zustand tracking
 
 export function useTimeSinceUpdate(): string {
-  const { lastRefresh } = useDashboardStore();
+  const configuredUsername = useConfiguredUsername();
+  const { dataUpdatedAt } = useQuery({
+    queryKey: queryKeys.dashboard(configuredUsername),
+    queryFn: () => dashboardRepo.getDashboard(configuredUsername),
+    staleTime: 60_000,
+  });
 
-  if (!lastRefresh) return 'Never';
+  if (!dataUpdatedAt) return 'Never';
 
-  const seconds = Math.floor((Date.now() - lastRefresh.getTime()) / 1000);
+  const seconds = Math.floor((Date.now() - dataUpdatedAt) / 1000);
 
   if (seconds < 60) return 'Just now';
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
@@ -123,10 +115,13 @@ export function useTimeSinceUpdate(): string {
 
 // === Edit Streak Hook ===
 
-export function useEditStreak(username: string = DEFAULT_CONFIG.username, days = 365) {
+export function useEditStreak(username?: string, days = 365) {
+  const configuredUsername = useConfiguredUsername();
+  const effectiveUsername = username ?? configuredUsername;
+
   return useQuery({
-    queryKey: queryKeys.editStreak(username),
-    queryFn: () => wikipediaApi.getUserEditStreak(username, days),
+    queryKey: queryKeys.editStreak(effectiveUsername),
+    queryFn: () => wikipediaApi.getUserEditStreak(effectiveUsername, days),
     staleTime: 5 * 60_000, // 5 minutes
     refetchOnWindowFocus: false,
   });
@@ -134,10 +129,13 @@ export function useEditStreak(username: string = DEFAULT_CONFIG.username, days =
 
 // === Top Edits Hook ===
 
-export function useTopEdits(username: string = DEFAULT_CONFIG.username, limit = 10) {
+export function useTopEdits(username?: string, limit = 10) {
+  const configuredUsername = useConfiguredUsername();
+  const effectiveUsername = username ?? configuredUsername;
+
   return useQuery({
-    queryKey: queryKeys.topEdits(username),
-    queryFn: () => wikipediaApi.getXToolsTopEdits(username, 0, limit),
+    queryKey: queryKeys.topEdits(effectiveUsername),
+    queryFn: () => wikipediaApi.getXToolsTopEdits(effectiveUsername, 0, limit),
     staleTime: 10 * 60_000, // 10 minutes
     refetchOnWindowFocus: false,
   });
@@ -145,10 +143,13 @@ export function useTopEdits(username: string = DEFAULT_CONFIG.username, limit = 
 
 // === Namespace Totals Hook ===
 
-export function useNamespaceTotals(username: string = DEFAULT_CONFIG.username) {
+export function useNamespaceTotals(username?: string) {
+  const configuredUsername = useConfiguredUsername();
+  const effectiveUsername = username ?? configuredUsername;
+
   return useQuery({
-    queryKey: queryKeys.namespaceTotals(username),
-    queryFn: () => wikipediaApi.getXToolsNamespaceTotals(username),
+    queryKey: queryKeys.namespaceTotals(effectiveUsername),
+    queryFn: () => wikipediaApi.getXToolsNamespaceTotals(effectiveUsername),
     staleTime: 10 * 60_000,
     refetchOnWindowFocus: false,
   });
@@ -156,10 +157,13 @@ export function useNamespaceTotals(username: string = DEFAULT_CONFIG.username) {
 
 // === Monthly Edit Counts Hook ===
 
-export function useMonthCounts(username: string = DEFAULT_CONFIG.username) {
+export function useMonthCounts(username?: string) {
+  const configuredUsername = useConfiguredUsername();
+  const effectiveUsername = username ?? configuredUsername;
+
   return useQuery({
-    queryKey: queryKeys.monthCounts(username),
-    queryFn: () => wikipediaApi.getXToolsMonthCounts(username),
+    queryKey: queryKeys.monthCounts(effectiveUsername),
+    queryFn: () => wikipediaApi.getXToolsMonthCounts(effectiveUsername),
     staleTime: 10 * 60_000,
     refetchOnWindowFocus: false,
   });
@@ -167,10 +171,13 @@ export function useMonthCounts(username: string = DEFAULT_CONFIG.username) {
 
 // === Thanks Received Hook ===
 
-export function useThanksReceived(username: string = DEFAULT_CONFIG.username, limit = 50) {
+export function useThanksReceived(username?: string, limit = 50) {
+  const configuredUsername = useConfiguredUsername();
+  const effectiveUsername = username ?? configuredUsername;
+
   return useQuery({
-    queryKey: queryKeys.thanksReceived(username),
-    queryFn: () => wikipediaApi.getThanksReceived(username, limit),
+    queryKey: queryKeys.thanksReceived(effectiveUsername),
+    queryFn: () => wikipediaApi.getThanksReceived(effectiveUsername, limit),
     staleTime: 5 * 60_000,
     refetchOnWindowFocus: false,
   });
@@ -178,10 +185,13 @@ export function useThanksReceived(username: string = DEFAULT_CONFIG.username, li
 
 // === Thanks Given Hook ===
 
-export function useThanksGiven(username: string = DEFAULT_CONFIG.username, limit = 50) {
+export function useThanksGiven(username?: string, limit = 50) {
+  const configuredUsername = useConfiguredUsername();
+  const effectiveUsername = username ?? configuredUsername;
+
   return useQuery({
-    queryKey: queryKeys.thanksGiven(username),
-    queryFn: () => wikipediaApi.getThanksGiven(username, limit),
+    queryKey: queryKeys.thanksGiven(effectiveUsername),
+    queryFn: () => wikipediaApi.getThanksGiven(effectiveUsername, limit),
     staleTime: 5 * 60_000,
     refetchOnWindowFocus: false,
   });
@@ -189,10 +199,13 @@ export function useThanksGiven(username: string = DEFAULT_CONFIG.username, limit
 
 // === Articles Created Hook ===
 
-export function useArticlesCreated(username: string = DEFAULT_CONFIG.username, limit = 100) {
+export function useArticlesCreated(username?: string, limit = 100) {
+  const configuredUsername = useConfiguredUsername();
+  const effectiveUsername = username ?? configuredUsername;
+
   return useQuery({
-    queryKey: queryKeys.articlesCreated(username),
-    queryFn: () => wikipediaApi.getArticlesCreated(username, 0, limit),
+    queryKey: queryKeys.articlesCreated(effectiveUsername),
+    queryFn: () => wikipediaApi.getArticlesCreated(effectiveUsername, 0, limit),
     staleTime: 10 * 60_000,
     refetchOnWindowFocus: false,
   });
@@ -200,10 +213,13 @@ export function useArticlesCreated(username: string = DEFAULT_CONFIG.username, l
 
 // === WikiProjects Hook ===
 
-export function useWikiProjects(username: string = DEFAULT_CONFIG.username) {
+export function useWikiProjects(username?: string) {
+  const configuredUsername = useConfiguredUsername();
+  const effectiveUsername = username ?? configuredUsername;
+
   return useQuery({
-    queryKey: queryKeys.wikiProjects(username),
-    queryFn: () => wikipediaApi.getUserWikiProjects(username),
+    queryKey: queryKeys.wikiProjects(effectiveUsername),
+    queryFn: () => wikipediaApi.getUserWikiProjects(effectiveUsername),
     staleTime: 30 * 60_000, // 30 minutes - projects don't change often
     refetchOnWindowFocus: false,
   });
@@ -247,10 +263,13 @@ export function usePageAssessments(titles: string[]) {
 
 // === Recent Edits Hook (for Watchlist-like view) ===
 
-export function useRecentEdits(username: string = DEFAULT_CONFIG.username, days = 7) {
+export function useRecentEdits(username?: string, days = 7) {
+  const configuredUsername = useConfiguredUsername();
+  const effectiveUsername = username ?? configuredUsername;
+
   return useQuery({
-    queryKey: queryKeys.recentEdits(username),
-    queryFn: () => wikipediaApi.getUserRecentEdits(username, days),
+    queryKey: queryKeys.recentEdits(effectiveUsername),
+    queryFn: () => wikipediaApi.getUserRecentEdits(effectiveUsername, days),
     staleTime: 60_000, // 1 minute
     refetchInterval: 5 * 60_000, // Auto-refresh every 5 minutes
   });

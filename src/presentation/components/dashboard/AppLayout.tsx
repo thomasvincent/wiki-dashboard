@@ -2,8 +2,11 @@
  * Main App Layout
  * Responsive layout with grouped sidebar navigation
  * Optimized for laptop screens
+ *
+ * Uses React.lazy for code splitting - each panel loads on demand
  */
 
+import { lazy, Suspense, type ComponentType } from 'react';
 import {
   Box,
   Drawer,
@@ -24,6 +27,7 @@ import {
   Switch,
   Collapse,
   Badge,
+  CircularProgress,
 } from '@mui/material';
 import {
   Menu as MenuIcon,
@@ -51,23 +55,89 @@ import {
 } from '@mui/icons-material';
 import { useUIStore, useNotificationStore } from '@presentation/hooks';
 import { useDashboard } from '@presentation/hooks/queries';
-import { DashboardOverview } from '../dashboard/Overview';
-import { DraftsPanel } from '../drafts/DraftsPanel';
-import { ContributionsPanel } from '../contributions/ContributionsPanel';
-import { TasksPanel } from '../tasks/TasksPanel';
-import { FocusAreasPanel } from '../focus-areas/FocusAreasPanel';
-import { CoiDisclosuresPanel } from '../coi/CoiDisclosuresPanel';
-import { WatchlistPanel } from '../watchlist/WatchlistPanel';
-import { NotificationsPanel } from '../notifications/NotificationsPanel';
-import { AnalyticsPanel } from '../analytics/AnalyticsPanel';
-import { AchievementsPanel } from '../achievements/AchievementsPanel';
-import { ImpactPanel } from '../impact/ImpactPanel';
-import { TemplatesPanel } from '../templates/TemplatesPanel';
-import { ResearchPanel } from '../research/ResearchPanel';
-import { QualityTrackerPanel } from '../quality/QualityTrackerPanel';
-import { CollaborationPanel } from '../collaboration/CollaborationPanel';
-import { SettingsPanel } from '../settings/SettingsPanel';
+import { ErrorBoundary } from '../common/ErrorBoundary';
 import type { ActiveSection } from '@presentation/hooks';
+
+// === Lazy-loaded Panels (Code Splitting) ===
+// Each panel loads only when navigated to, reducing initial bundle size
+
+const DashboardOverview = lazy(() =>
+  import('../dashboard/Overview').then((m) => ({ default: m.DashboardOverview }))
+);
+const DraftsPanel = lazy(() =>
+  import('../drafts/DraftsPanel').then((m) => ({ default: m.DraftsPanel }))
+);
+const ContributionsPanel = lazy(() =>
+  import('../contributions/ContributionsPanel').then((m) => ({ default: m.ContributionsPanel }))
+);
+const TasksPanel = lazy(() =>
+  import('../tasks/TasksPanel').then((m) => ({ default: m.TasksPanel }))
+);
+const FocusAreasPanel = lazy(() =>
+  import('../focus-areas/FocusAreasPanel').then((m) => ({ default: m.FocusAreasPanel }))
+);
+const CoiDisclosuresPanel = lazy(() =>
+  import('../coi/CoiDisclosuresPanel').then((m) => ({ default: m.CoiDisclosuresPanel }))
+);
+const WatchlistPanel = lazy(() =>
+  import('../watchlist/WatchlistPanel').then((m) => ({ default: m.WatchlistPanel }))
+);
+const NotificationsPanel = lazy(() =>
+  import('../notifications/NotificationsPanel').then((m) => ({ default: m.NotificationsPanel }))
+);
+const AnalyticsPanel = lazy(() =>
+  import('../analytics/AnalyticsPanel').then((m) => ({ default: m.AnalyticsPanel }))
+);
+const AchievementsPanel = lazy(() =>
+  import('../achievements/AchievementsPanel').then((m) => ({ default: m.AchievementsPanel }))
+);
+const ImpactPanel = lazy(() =>
+  import('../impact/ImpactPanel').then((m) => ({ default: m.ImpactPanel }))
+);
+const TemplatesPanel = lazy(() =>
+  import('../templates/TemplatesPanel').then((m) => ({ default: m.TemplatesPanel }))
+);
+const ResearchPanel = lazy(() =>
+  import('../research/ResearchPanel').then((m) => ({ default: m.ResearchPanel }))
+);
+const QualityTrackerPanel = lazy(() =>
+  import('../quality/QualityTrackerPanel').then((m) => ({ default: m.QualityTrackerPanel }))
+);
+const CollaborationPanel = lazy(() =>
+  import('../collaboration/CollaborationPanel').then((m) => ({ default: m.CollaborationPanel }))
+);
+const SettingsPanel = lazy(() =>
+  import('../settings/SettingsPanel').then((m) => ({ default: m.SettingsPanel }))
+);
+
+// === Section Component Map (Type-safe routing) ===
+const SECTION_COMPONENTS: Record<ActiveSection, ComponentType> = {
+  overview: DashboardOverview,
+  drafts: DraftsPanel,
+  contributions: ContributionsPanel,
+  tasks: TasksPanel,
+  'focus-areas': FocusAreasPanel,
+  coi: CoiDisclosuresPanel,
+  watchlist: WatchlistPanel,
+  notifications: NotificationsPanel,
+  analytics: AnalyticsPanel,
+  achievements: AchievementsPanel,
+  impact: ImpactPanel,
+  templates: TemplatesPanel,
+  research: ResearchPanel,
+  quality: QualityTrackerPanel,
+  collaboration: CollaborationPanel,
+  settings: SettingsPanel,
+};
+
+// === Loading Fallback ===
+function PanelLoadingFallback() {
+  return (
+    <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
+      <CircularProgress />
+    </Box>
+  );
+}
 
 // === Sidebar Width ===
 const DRAWER_WIDTH = 220;
@@ -91,9 +161,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     id: 'dashboard',
     label: 'Dashboard',
-    items: [
-      { id: 'overview', label: 'Overview', icon: <DashboardIcon /> },
-    ],
+    items: [{ id: 'overview', label: 'Overview', icon: <DashboardIcon /> }],
   },
   {
     id: 'my-work',
@@ -142,9 +210,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     id: 'account',
     label: 'Account',
-    items: [
-      { id: 'settings', label: 'Settings', icon: <SettingsIcon /> },
-    ],
+    items: [{ id: 'settings', label: 'Settings', icon: <SettingsIcon /> }],
   },
 ];
 
@@ -157,7 +223,14 @@ interface SidebarProps {
 }
 
 function Sidebar({ open, onClose, variant }: SidebarProps) {
-  const { activeSection, setActiveSection, darkMode, toggleDarkMode, expandedNavGroups, toggleNavGroup } = useUIStore();
+  const {
+    activeSection,
+    setActiveSection,
+    darkMode,
+    toggleDarkMode,
+    expandedNavGroups,
+    toggleNavGroup,
+  } = useUIStore();
   const { data: dashboard } = useDashboard();
   const { unreadCount } = useNotificationStore();
 
@@ -206,10 +279,7 @@ function Sidebar({ open, onClose, variant }: SidebarProps) {
 
           return (
             <Box key={group.id}>
-              <ListItemButton
-                onClick={() => toggleNavGroup(group.id)}
-                sx={{ py: 0.5, px: 2 }}
-              >
+              <ListItemButton onClick={() => toggleNavGroup(group.id)} sx={{ py: 0.5, px: 2 }}>
                 <ListItemText
                   primary={group.label}
                   primaryTypographyProps={{
@@ -275,7 +345,12 @@ function Sidebar({ open, onClose, variant }: SidebarProps) {
       <List dense>
         <ListItem disablePadding>
           <ListItemButton
-            onClick={() => window.open(`https://en.wikipedia.org/wiki/User:${dashboard?.user.username}/Dashboard`, '_blank')}
+            onClick={() =>
+              window.open(
+                `https://en.wikipedia.org/wiki/User:${dashboard?.user.username}/Dashboard`,
+                '_blank'
+              )
+            }
             sx={{ py: 0.5, px: 2 }}
           >
             <ListItemIcon sx={{ minWidth: 36 }}>
@@ -289,16 +364,18 @@ function Sidebar({ open, onClose, variant }: SidebarProps) {
         </ListItem>
         <ListItem disablePadding>
           <ListItemButton
-            onClick={() => window.open(`https://xtools.wmcloud.org/ec/en.wikipedia.org/${dashboard?.user.username}`, '_blank')}
+            onClick={() =>
+              window.open(
+                `https://xtools.wmcloud.org/ec/en.wikipedia.org/${dashboard?.user.username}`,
+                '_blank'
+              )
+            }
             sx={{ py: 0.5, px: 2 }}
           >
             <ListItemIcon sx={{ minWidth: 36 }}>
               <OpenInNewIcon fontSize="small" />
             </ListItemIcon>
-            <ListItemText
-              primary="XTools"
-              primaryTypographyProps={{ variant: 'caption' }}
-            />
+            <ListItemText primary="XTools" primaryTypographyProps={{ variant: 'caption' }} />
           </ListItemButton>
         </ListItem>
       </List>
@@ -309,61 +386,28 @@ function Sidebar({ open, onClose, variant }: SidebarProps) {
       <Box sx={{ p: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           {darkMode ? <DarkModeIcon fontSize="small" /> : <LightModeIcon fontSize="small" />}
-          <Typography variant="caption">
-            {darkMode ? 'Dark' : 'Light'}
-          </Typography>
+          <Typography variant="caption">{darkMode ? 'Dark' : 'Light'}</Typography>
         </Box>
-        <Switch
-          size="small"
-          checked={darkMode}
-          onChange={toggleDarkMode}
-        />
+        <Switch size="small" checked={darkMode} onChange={toggleDarkMode} />
       </Box>
     </Drawer>
   );
 }
 
 // === Content Router ===
+// Uses component map for type-safe routing with Suspense + ErrorBoundary
 
 function ContentRouter() {
   const { activeSection } = useUIStore();
+  const Component = SECTION_COMPONENTS[activeSection] || DashboardOverview;
 
-  switch (activeSection) {
-    case 'overview':
-      return <DashboardOverview />;
-    case 'drafts':
-      return <DraftsPanel />;
-    case 'contributions':
-      return <ContributionsPanel />;
-    case 'tasks':
-      return <TasksPanel />;
-    case 'focus-areas':
-      return <FocusAreasPanel />;
-    case 'coi':
-      return <CoiDisclosuresPanel />;
-    case 'watchlist':
-      return <WatchlistPanel />;
-    case 'notifications':
-      return <NotificationsPanel />;
-    case 'analytics':
-      return <AnalyticsPanel />;
-    case 'achievements':
-      return <AchievementsPanel />;
-    case 'impact':
-      return <ImpactPanel />;
-    case 'templates':
-      return <TemplatesPanel />;
-    case 'research':
-      return <ResearchPanel />;
-    case 'quality':
-      return <QualityTrackerPanel />;
-    case 'collaboration':
-      return <CollaborationPanel />;
-    case 'settings':
-      return <SettingsPanel />;
-    default:
-      return <DashboardOverview />;
-  }
+  return (
+    <ErrorBoundary>
+      <Suspense fallback={<PanelLoadingFallback />}>
+        <Component />
+      </Suspense>
+    </ErrorBoundary>
+  );
 }
 
 // === Main Layout ===
@@ -388,11 +432,7 @@ export function AppLayout() {
       >
         <Toolbar>
           {isMobile && (
-            <IconButton
-              edge="start"
-              onClick={toggleSidebar}
-              sx={{ mr: 2 }}
-            >
+            <IconButton edge="start" onClick={toggleSidebar} sx={{ mr: 2 }}>
               <MenuIcon />
             </IconButton>
           )}
@@ -400,9 +440,7 @@ export function AppLayout() {
             Wikipedia Editor Dashboard
           </Typography>
           <Tooltip title="Open Wikipedia">
-            <IconButton
-              onClick={() => window.open('https://en.wikipedia.org', '_blank')}
-            >
+            <IconButton onClick={() => window.open('https://en.wikipedia.org', '_blank')}>
               <OpenInNewIcon />
             </IconButton>
           </Tooltip>

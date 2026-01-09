@@ -1,36 +1,59 @@
 /**
  * Domain Entities - Core business objects for Wikipedia Editor Dashboard
  * Following DDD principles with immutable value objects
+ * Uses Discriminated Unions for type-safe state handling
  */
 
 // === Value Objects ===
 
-export type DraftStatus = 
+export type DraftStatus =
   | 'pending_review'
-  | 'under_review' 
+  | 'under_review'
   | 'accepted'
   | 'declined'
   | 'in_development'
   | 'abandoned';
 
-export type ContributionType = 
+export type ContributionType =
   | 'major_expansion'
   | 'minor_edit'
   | 'new_article'
   | 'revert'
   | 'talk_page';
 
-export type FocusAreaStatus = 
-  | 'active'
-  | 'planned'
-  | 'completed'
-  | 'blocked';
+export type FocusAreaStatus = 'active' | 'planned' | 'completed' | 'blocked';
 
 export type TaskPriority = 'high' | 'medium' | 'low';
 export type TaskStatus = 'not_started' | 'in_progress' | 'completed' | 'blocked';
 
-// === Entities ===
+// === User Entity with Discriminated Union ===
+// Authenticated users have guaranteed metadata
 
+interface WikiUserBase {
+  readonly username: string;
+}
+
+export interface AuthenticatedWikiUser extends WikiUserBase {
+  readonly kind: 'authenticated';
+  readonly userId: number;
+  readonly registrationDate: Date;
+  readonly editCount: number;
+  readonly groups: readonly string[];
+  readonly accessToken: string;
+  readonly accessSecret: string;
+}
+
+export interface UnauthenticatedWikiUser extends WikiUserBase {
+  readonly kind: 'unauthenticated';
+  readonly userId: number;
+  readonly registrationDate: Date;
+  readonly editCount: number;
+  readonly groups: readonly string[];
+}
+
+export type WikiUserState = AuthenticatedWikiUser | UnauthenticatedWikiUser;
+
+// Legacy interface for backwards compatibility
 export interface WikiUser {
   readonly username: string;
   readonly userId: number;
@@ -39,6 +62,78 @@ export interface WikiUser {
   readonly groups: readonly string[];
 }
 
+// Type guard for authenticated users
+export function isAuthenticated(user: WikiUserState): user is AuthenticatedWikiUser {
+  return user.kind === 'authenticated';
+}
+
+// === Draft with Discriminated Union ===
+// Different statuses have different guaranteed properties
+
+interface DraftBase {
+  readonly id: string;
+  readonly title: string;
+  readonly pageUrl: string;
+  readonly talkPageUrl: string;
+  readonly createdAt: Date;
+  readonly lastEditedAt: Date;
+  readonly coiDisclosed: boolean;
+  readonly coiDetails: string | null;
+  readonly notes: string;
+}
+
+export interface InDevelopmentDraft extends DraftBase {
+  readonly status: 'in_development';
+  readonly submittedAt: null;
+  readonly afcLogUrl: null;
+}
+
+export interface SubmittedDraft extends DraftBase {
+  readonly status: 'pending_review' | 'under_review';
+  readonly submittedAt: Date; // Guaranteed when submitted
+  readonly afcLogUrl: string; // Has log URL when in AFC
+}
+
+export interface AcceptedDraft extends DraftBase {
+  readonly status: 'accepted';
+  readonly submittedAt: Date;
+  readonly afcLogUrl: string;
+  readonly acceptedAt: Date;
+  readonly articleUrl: string; // Final article URL
+}
+
+export interface DeclinedDraft extends DraftBase {
+  readonly status: 'declined';
+  readonly submittedAt: Date;
+  readonly afcLogUrl: string;
+  readonly declinedAt: Date;
+  readonly declineReason: string;
+}
+
+export interface AbandonedDraft extends DraftBase {
+  readonly status: 'abandoned';
+  readonly submittedAt: Date | null;
+  readonly afcLogUrl: string | null;
+  readonly abandonedAt: Date;
+}
+
+export type DraftVariant =
+  | InDevelopmentDraft
+  | SubmittedDraft
+  | AcceptedDraft
+  | DeclinedDraft
+  | AbandonedDraft;
+
+// Type guards for draft statuses
+export function isSubmittedDraft(d: DraftVariant): d is SubmittedDraft {
+  return d.status === 'pending_review' || d.status === 'under_review';
+}
+
+export function isAcceptedDraft(d: DraftVariant): d is AcceptedDraft {
+  return d.status === 'accepted';
+}
+
+// Legacy interface for backwards compatibility
 export interface Draft {
   readonly id: string;
   readonly title: string;
@@ -54,6 +149,67 @@ export interface Draft {
   readonly afcLogUrl: string | null;
 }
 
+// === Contribution with Discriminated Union ===
+// Different edit types have different guaranteed properties
+
+interface ContributionBase {
+  readonly revisionId: number;
+  readonly articleTitle: string;
+  readonly articleUrl: string;
+  readonly timestamp: Date;
+  readonly byteDiff: number;
+  readonly summary: string;
+  readonly tags: readonly string[];
+}
+
+export interface NewArticleContribution extends ContributionBase {
+  readonly type: 'new_article';
+  readonly isMinor: false; // New articles are never minor
+  readonly parentId: 0; // No parent revision
+}
+
+export interface MajorExpansionContribution extends ContributionBase {
+  readonly type: 'major_expansion';
+  readonly isMinor: false;
+  readonly parentId: number;
+}
+
+export interface MinorEditContribution extends ContributionBase {
+  readonly type: 'minor_edit';
+  readonly isMinor: true;
+  readonly parentId: number;
+}
+
+export interface RevertContribution extends ContributionBase {
+  readonly type: 'revert';
+  readonly isMinor: boolean;
+  readonly parentId: number;
+  readonly revertedRevisionId: number;
+}
+
+export interface TalkPageContribution extends ContributionBase {
+  readonly type: 'talk_page';
+  readonly isMinor: boolean;
+  readonly parentId: number;
+}
+
+export type ContributionVariant =
+  | NewArticleContribution
+  | MajorExpansionContribution
+  | MinorEditContribution
+  | RevertContribution
+  | TalkPageContribution;
+
+// Type guards for contribution types
+export function isNewArticle(c: ContributionVariant): c is NewArticleContribution {
+  return c.type === 'new_article';
+}
+
+export function isRevert(c: ContributionVariant): c is RevertContribution {
+  return c.type === 'revert';
+}
+
+// Legacy interface for backwards compatibility
 export interface Contribution {
   readonly revisionId: number;
   readonly articleTitle: string;
@@ -141,6 +297,80 @@ export type NotificationType =
   | 'welcome'
   | 'edit-thank';
 
+// === Notification with Discriminated Union ===
+// Different notification types have different guaranteed properties
+
+interface NotificationBase {
+  readonly id: string;
+  readonly timestamp: Date;
+  readonly read: boolean;
+  readonly message: string;
+}
+
+export interface ThankNotification extends NotificationBase {
+  readonly type: 'thank' | 'edit-thank';
+  readonly agent: string; // Always has who thanked
+  readonly title: string; // Always has article title
+  readonly revisionId: number;
+  readonly url: string;
+}
+
+export interface MentionNotification extends NotificationBase {
+  readonly type: 'mention';
+  readonly agent: string; // Who mentioned you
+  readonly title: string; // Where mentioned
+  readonly url: string;
+}
+
+export interface MessageNotification extends NotificationBase {
+  readonly type: 'message';
+  readonly agent: string; // Who left message
+  readonly title: string; // Your talk page
+  readonly sectionTitle: string | null;
+  readonly url: string;
+}
+
+export interface ReviewNotification extends NotificationBase {
+  readonly type: 'review';
+  readonly title: string; // Article/draft reviewed
+  readonly result: 'accept' | 'decline' | 'comment';
+  readonly reviewer: string;
+  readonly url: string;
+}
+
+export interface MilestoneNotification extends NotificationBase {
+  readonly type: 'edit-milestone';
+  readonly editCount: number;
+  readonly title: null;
+  readonly agent: null;
+  readonly url: null;
+}
+
+export interface WelcomeNotification extends NotificationBase {
+  readonly type: 'welcome';
+  readonly title: null;
+  readonly agent: null;
+  readonly url: string;
+}
+
+export type NotificationVariant =
+  | ThankNotification
+  | MentionNotification
+  | MessageNotification
+  | ReviewNotification
+  | MilestoneNotification
+  | WelcomeNotification;
+
+// Type guards for notification types
+export function isThankNotification(n: NotificationVariant): n is ThankNotification {
+  return n.type === 'thank' || n.type === 'edit-thank';
+}
+
+export function isReviewNotification(n: NotificationVariant): n is ReviewNotification {
+  return n.type === 'review';
+}
+
+// Legacy interface for backwards compatibility
 export interface WikiNotification {
   readonly id: string;
   readonly type: NotificationType;

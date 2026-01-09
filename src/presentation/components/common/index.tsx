@@ -71,7 +71,7 @@ export function StatusChip({ status, type, ...props }: StatusChipProps) {
       display = { label: status, color: '#757575' };
   }
 
-  const chipIcon = display.icon ? STATUS_ICON_MAP[display.icon] as React.ReactElement : undefined;
+  const chipIcon = display.icon ? (STATUS_ICON_MAP[display.icon] as React.ReactElement) : undefined;
 
   return (
     <Chip
@@ -102,7 +102,15 @@ interface StatsCardProps {
   onClick?: () => void;
 }
 
-export function StatsCard({ title, value, subtitle, icon, trend, loading, onClick }: StatsCardProps) {
+export function StatsCard({
+  title,
+  value,
+  subtitle,
+  icon,
+  trend,
+  loading,
+  onClick,
+}: StatsCardProps) {
   if (loading) {
     return (
       <Card sx={{ height: '100%', cursor: onClick ? 'pointer' : 'default' }}>
@@ -130,11 +138,7 @@ export function StatsCard({ title, value, subtitle, icon, trend, loading, onClic
           <Typography variant="body2" color="text.secondary" gutterBottom>
             {title}
           </Typography>
-          {icon && (
-            <Box sx={{ color: 'primary.main', opacity: 0.7 }}>
-              {icon}
-            </Box>
-          )}
+          {icon && <Box sx={{ color: 'primary.main', opacity: 0.7 }}>{icon}</Box>}
         </Box>
         <Typography variant="h4" component="div" sx={{ fontWeight: 600, my: 0.5 }}>
           {value}
@@ -167,7 +171,13 @@ interface ProgressCardProps {
   color?: 'primary' | 'secondary' | 'success' | 'warning' | 'error';
 }
 
-export function ProgressCard({ title, current, total, subtitle, color = 'primary' }: ProgressCardProps) {
+export function ProgressCard({
+  title,
+  current,
+  total,
+  subtitle,
+  color = 'primary',
+}: ProgressCardProps) {
   const percent = total > 0 ? Math.round((current / total) * 100) : 0;
 
   return (
@@ -181,12 +191,7 @@ export function ProgressCard({ title, current, total, subtitle, color = 'primary
             {current}/{total}
           </Typography>
         </Box>
-        <LinearProgress
-          variant="determinate"
-          value={percent}
-          color={color}
-          sx={{ mb: 0.5 }}
-        />
+        <LinearProgress variant="determinate" value={percent} color={color} sx={{ mb: 0.5 }} />
         {subtitle && (
           <Typography variant="caption" color="text.secondary">
             {subtitle}
@@ -252,7 +257,10 @@ export function SectionHeader({ title, subtitle, action, onRefresh, loading }: S
         {onRefresh && (
           <Tooltip title="Refresh">
             <IconButton size="small" onClick={onRefresh} disabled={loading ?? false}>
-              <RefreshIcon fontSize="small" sx={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
+              <RefreshIcon
+                fontSize="small"
+                sx={{ animation: loading ? 'spin 1s linear infinite' : 'none' }}
+              />
             </IconButton>
           </Tooltip>
         )}
@@ -284,11 +292,7 @@ export function EmptyState({ title, description, action, icon }: EmptyStateProps
         textAlign: 'center',
       }}
     >
-      {icon && (
-        <Box sx={{ color: 'text.secondary', mb: 2, opacity: 0.5 }}>
-          {icon}
-        </Box>
-      )}
+      {icon && <Box sx={{ color: 'text.secondary', mb: 2, opacity: 0.5 }}>{icon}</Box>}
       <Typography variant="h6" gutterBottom>
         {title}
       </Typography>
@@ -334,3 +338,6 @@ if (typeof document !== 'undefined') {
   style.textContent = globalStyles;
   document.head.appendChild(style);
 }
+
+// === Re-export Error Boundary ===
+export { ErrorBoundary, ErrorFallback } from './ErrorBoundary';

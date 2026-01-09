@@ -5,3 +5,5 @@
 
 export * from './store';
 export * from './queries';
+export * from './actions';
+export * from './useOnlineStatus';
